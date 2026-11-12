@@ -1,0 +1,12 @@
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x86\Debug\keys\license-public.pem
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x86\Debug\RMCFlowComercioLocal.exe
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x86\Debug\RMCFlowComercioLocal.pdb
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x86\Debug\BouncyCastle.Cryptography.dll
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x86\Debug\System.Data.SQLite.dll
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x86\Debug\System.Data.SQLite.xml
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x86\Debug\BouncyCastle.Cryptography.xml
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x86\Debug\RMCFlowComercioLocal.csproj.AssemblyReference.cache
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x86\Debug\RMCFlowComercioLocal.csproj.CoreCompileInputs.cache
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x86\Debug\RMCFlowC.1BF80B9F.Up2Date
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x86\Debug\RMCFlowComercioLocal.exe
+C:\Users\Ronal\Documents\Codex\2026-11-04\new-chat\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x86\Debug\RMCFlowComercioLocal.pdb

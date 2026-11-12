@@ -1,0 +1,12 @@
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x64\Debug\keys\license-public.pem
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x64\Debug\RMCFlowComercioLocal.exe
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x64\Debug\RMCFlowComercioLocal.pdb
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x64\Debug\BouncyCastle.Cryptography.dll
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x64\Debug\System.Data.SQLite.dll
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x64\Debug\System.Data.SQLite.xml
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\bin\x64\Debug\BouncyCastle.Cryptography.xml
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x64\Debug\RMCFlowComercioLocal.csproj.AssemblyReference.cache
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x64\Debug\RMCFlowComercioLocal.csproj.CoreCompileInputs.cache
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x64\Debug\RMCFlowC.1BF80B9F.Up2Date
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x64\Debug\RMCFlowComercioLocal.exe
+C:\Users\Ronal\Downloads\RMCFlowComercioLocal-Fase5-documentos-pdf-impressao (1)\RMCFlowComercioLocal\src\RMCFlowComercioLocal\obj\x64\Debug\RMCFlowComercioLocal.pdb
