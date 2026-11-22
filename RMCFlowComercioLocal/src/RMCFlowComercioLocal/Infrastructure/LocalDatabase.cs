@@ -438,9 +438,17 @@ FROM vehicles INNER JOIN clients ON clients.id = vehicles.client_id ORDER BY cli
 
         public DataTable FindWorkOrders(string status, string search)
         {
-            var value=(search??string.Empty).Replace("'","''");var statusClause=string.IsNullOrWhiteSpace(status)||status=="Todos"?string.Empty:" AND work_orders.status='"+status.Replace("'","''")+"'";
+            return FindWorkOrders(status, search, null, null);
+        }
+
+        public DataTable FindWorkOrders(string status, string search, DateTime? fromDate, DateTime? toDate)
+        {
+            var value = (search ?? string.Empty).Replace("'", "''");
+            var statusClause = string.IsNullOrWhiteSpace(status) || status == "Todos" ? string.Empty : " AND work_orders.status='" + status.Replace("'", "''") + "'";
+            var fromClause = fromDate.HasValue ? " AND substr(work_orders.opened_at,1,10)>='" + fromDate.Value.ToString("yyyy-MM-dd") + "'" : string.Empty;
+            var toClause = toDate.HasValue ? " AND substr(work_orders.opened_at,1,10)<='" + toDate.Value.ToString("yyyy-MM-dd") + "'" : string.Empty;
             return Query(@"SELECT work_orders.id AS 'Código', work_orders.number AS 'OS', clients.name AS 'Cliente', vehicles.type || ' ' || COALESCE(vehicles.manufacturer, '') || ' ' || vehicles.model AS 'Equipamento', work_orders.status AS 'Status', CASE WHEN EXISTS(SELECT 1 FROM financial_entries WHERE work_order_id=work_orders.id AND status='Pago') THEN 'Quitada' ELSE 'Pendente' END AS 'Pagamento', COALESCE(work_orders.quote_number,'') AS 'Origem', substr(work_orders.opened_at, 1, 10) AS 'Entrada', COALESCE(work_orders.expected_at, '') AS 'Previsão', work_orders.client_id AS client_id, work_orders.vehicle_id AS vehicle_id, work_orders.mileage AS estado_entrada, work_orders.fuel_level AS acessorios_recebidos, work_orders.complaint AS reclamacao, work_orders.diagnosis AS diagnostico, work_orders.notes AS observacoes, COALESCE(work_orders.approval_history,'') AS historico_aprovacao
-FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id INNER JOIN vehicles ON vehicles.id=work_orders.vehicle_id WHERE (work_orders.number LIKE '%"+value+"%' OR clients.name LIKE '%"+value+"%' OR vehicles.model LIKE '%"+value+"%' OR COALESCE(vehicles.plate,'') LIKE '%"+value+"%')"+statusClause+" ORDER BY work_orders.id DESC;");
+FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id INNER JOIN vehicles ON vehicles.id=work_orders.vehicle_id WHERE (work_orders.number LIKE '%" + value + "%' OR clients.name LIKE '%" + value + "%' OR vehicles.model LIKE '%" + value + "%' OR COALESCE(vehicles.plate,'') LIKE '%" + value + "%')" + statusClause + fromClause + toClause + " ORDER BY work_orders.id DESC;");
         }
 
         public DataTable GetAppointments()
@@ -498,7 +506,16 @@ ON CONFLICT(id) DO UPDATE SET client_id=@client,vehicle_id=@vehicle,scheduled_at
 
         public DataTable GetQuotes()
         {
-            return Query(@"SELECT quotes.id AS 'Código', quotes.number AS 'Orçamento', clients.name AS 'Cliente', vehicles.type || ' ' || COALESCE(vehicles.manufacturer, '') || ' ' || vehicles.model AS 'Equipamento', quotes.status AS 'Status', substr(quotes.created_at,1,10) AS 'Emissão', COALESCE(quotes.valid_until,'') AS 'Validade', printf('R$ %.2f', COALESCE((SELECT SUM(quantity * unit_price) FROM quote_items WHERE quote_id=quotes.id),0)) AS 'Total', quotes.client_id AS client_id, quotes.vehicle_id AS vehicle_id, COALESCE(quotes.complaint,'') AS reclamacao, COALESCE(quotes.notes,'') AS observacoes, quotes.converted_work_order_id AS os_convertida FROM quotes INNER JOIN clients ON clients.id=quotes.client_id INNER JOIN vehicles ON vehicles.id=quotes.vehicle_id ORDER BY quotes.id DESC;");
+            return FindQuotes("Todos", string.Empty, null, null);
+        }
+
+        public DataTable FindQuotes(string status, string search, DateTime? fromDate, DateTime? toDate)
+        {
+            var value = (search ?? string.Empty).Replace("'", "''");
+            var statusClause = string.IsNullOrWhiteSpace(status) || status == "Todos" ? string.Empty : " AND quotes.status='" + status.Replace("'", "''") + "'";
+            var fromClause = fromDate.HasValue ? " AND substr(quotes.created_at,1,10)>='" + fromDate.Value.ToString("yyyy-MM-dd") + "'" : string.Empty;
+            var toClause = toDate.HasValue ? " AND substr(quotes.created_at,1,10)<='" + toDate.Value.ToString("yyyy-MM-dd") + "'" : string.Empty;
+            return Query(@"SELECT quotes.id AS 'Código', quotes.number AS 'Orçamento', clients.name AS 'Cliente', vehicles.type || ' ' || COALESCE(vehicles.manufacturer, '') || ' ' || vehicles.model AS 'Equipamento', quotes.status AS 'Status', substr(quotes.created_at,1,10) AS 'Emissão', COALESCE(quotes.valid_until,'') AS 'Validade', printf('R$ %.2f', COALESCE((SELECT SUM(quantity * unit_price) FROM quote_items WHERE quote_id=quotes.id),0)) AS 'Total', quotes.client_id AS client_id, quotes.vehicle_id AS vehicle_id, COALESCE(quotes.complaint,'') AS reclamacao, COALESCE(quotes.notes,'') AS observacoes, quotes.converted_work_order_id AS os_convertida FROM quotes INNER JOIN clients ON clients.id=quotes.client_id INNER JOIN vehicles ON vehicles.id=quotes.vehicle_id WHERE (quotes.number LIKE '%" + value + "%' OR clients.name LIKE '%" + value + "%' OR vehicles.model LIKE '%" + value + "%' OR COALESCE(vehicles.plate,'') LIKE '%" + value + "%')" + statusClause + fromClause + toClause + " ORDER BY quotes.id DESC;");
         }
 
         public DataTable GetQuoteItems(long quoteId)
@@ -968,8 +985,15 @@ ORDER BY 9, 2, 3;");
 
         public DataTable FindSales(string search)
         {
+            return FindSales(search, null, null);
+        }
+
+        public DataTable FindSales(string search, DateTime? fromDate, DateTime? toDate)
+        {
             var value = (search ?? string.Empty).Replace("'", "''");
-            return Query("SELECT sales.id AS 'Código', sales.number AS 'Venda', COALESCE(clients.name,'Consumidor não identificado') AS 'Cliente', sales.status AS 'Status', COALESCE(sales.payment_method,'') AS 'Pagamento', printf('R$ %.2f',sales.total) AS 'Total', substr(sales.created_at,1,19) AS 'Data' FROM sales LEFT JOIN clients ON clients.id=sales.client_id WHERE sales.number LIKE '%" + value + "%' OR COALESCE(clients.name,'') LIKE '%" + value + "%' ORDER BY sales.id DESC;");
+            var fromClause = fromDate.HasValue ? " AND substr(sales.created_at,1,10)>='" + fromDate.Value.ToString("yyyy-MM-dd") + "'" : string.Empty;
+            var toClause = toDate.HasValue ? " AND substr(sales.created_at,1,10)<='" + toDate.Value.ToString("yyyy-MM-dd") + "'" : string.Empty;
+            return Query("SELECT sales.id AS 'Código', sales.number AS 'Venda', COALESCE(clients.name,'Consumidor não identificado') AS 'Cliente', sales.status AS 'Status', COALESCE(sales.payment_method,'') AS 'Pagamento', printf('R$ %.2f',sales.total) AS 'Total', substr(sales.created_at,1,19) AS 'Data' FROM sales LEFT JOIN clients ON clients.id=sales.client_id WHERE (sales.number LIKE '%" + value + "%' OR COALESCE(clients.name,'') LIKE '%" + value + "%')" + fromClause + toClause + " ORDER BY sales.id DESC;");
         }
 
         public DataTable GetSaleHeader(string number)
