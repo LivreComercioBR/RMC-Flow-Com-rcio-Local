@@ -266,8 +266,15 @@ namespace RMCFlowComercioLocal
         }
         private TabPage PdvPage()
         {
-            var page = Page("PDV"); var open = new Button { Text = "Abrir PDV", Location = new Point(28, 28), Size = new Size(160, 40), BackColor = Color.FromArgb(24,189,200), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Enabled = _database.HasPermission(_user.Id,_user.Role,"sales.create") }; open.Click += (s,e) => { using (var form = new PdvForm(_database)) form.ShowDialog(this); RefreshData(); }; page.Controls.Add(open);
-            page.Controls.Add(new Label { Text = "Venda rápida com busca por nome, código interno ou leitor de código de barras.", Location = new Point(30, 88), AutoSize = true, ForeColor = Color.FromArgb(53,73,94) }); return page;
+            var page = Page("PDV");
+            var open = new Button { Text = "Abrir PDV", Location = new Point(28, 28), Size = new Size(160, 40), BackColor = Color.FromArgb(24,189,200), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Enabled = _database.HasPermission(_user.Id,_user.Role,"sales.create") };
+            open.Click += (s,e) => { using (var form = new PdvForm(_database)) form.ShowDialog(this); RefreshData(); };
+            page.Controls.Add(open);
+            var history = new Button { Text = "Vendas realizadas", Location = new Point(205, 28), Size = new Size(180, 40), Enabled = _database.HasPermission(_user.Id,_user.Role,"sales.view") };
+            history.Click += (s,e) => { using (var form = new SalesHistoryForm(_database)) form.ShowDialog(this); RefreshData(); };
+            page.Controls.Add(history);
+            page.Controls.Add(new Label { Text = "Consulte vendas concluídas, localize comprovantes e imprima uma segunda via.", Location = new Point(30, 88), AutoSize = true, ForeColor = Color.FromArgb(53,73,94) });
+            return page;
         }
         private TabPage CashPage()
         {
@@ -1085,7 +1092,7 @@ namespace RMCFlowComercioLocal
         private void LoadClients() { _client.DataSource = _database.GetSaleClientLookup(); _client.DisplayMember = "name"; _client.ValueMember = "id"; }
         private void NewClient() { using (var form = new ClientEditor(_database, null)) { if (form.ShowDialog(this) == DialogResult.OK) LoadClients(); } }
         private void SearchClient() { using (var form = new ClientSearchForm(_database)) { if (form.ShowDialog(this) == DialogResult.OK) { LoadClients(); _client.SelectedValue = form.SelectedId; } } }
-        private void Finish(object sender, EventArgs e) { if (_items.Rows.Count==0) { MessageBox.Show("Inclua ao menos um produto no carrinho."); return; } long? clientId = null; if (_client.SelectedValue != null && Convert.ToInt64(_client.SelectedValue) > 0) clientId = Convert.ToInt64(_client.SelectedValue); var number=_database.NextSaleNumber(); try { _database.SaveSale(number,_items,_payment.Text,_discount.Value,clientId); } catch(Exception ex) { MessageBox.Show(ex.Message); return; } MessageBox.Show("Venda " + number + " finalizada com sucesso."); using(var receipt=new SaleReceiptForm(number,_items,_payment.Text,_discount.Value)) receipt.ShowDialog(this); DialogResult=DialogResult.OK; }
+        private void Finish(object sender, EventArgs e) { if (_items.Rows.Count==0) { MessageBox.Show("Inclua ao menos um produto no carrinho."); return; } long? clientId = null; if (_client.SelectedValue != null && Convert.ToInt64(_client.SelectedValue) > 0) clientId = Convert.ToInt64(_client.SelectedValue); var number=_database.NextSaleNumber(); try { _database.SaveSale(number,_items,_payment.Text,_discount.Value,clientId); } catch(Exception ex) { MessageBox.Show(ex.Message); return; } MessageBox.Show("Venda " + number + " finalizada com sucesso."); using(var receipt=new SaleReceiptForm(_database,number)) receipt.ShowDialog(this); DialogResult=DialogResult.OK; }
     }
 
     internal sealed class ClientSearchForm : Form
@@ -1098,7 +1105,56 @@ namespace RMCFlowComercioLocal
     }
 
     internal sealed class SaleReceiptForm : Form
-    { private readonly WebBrowser _browser=new WebBrowser(); public SaleReceiptForm(string number,DataTable items,string payment,decimal discount){Text="Recibo da venda";StartPosition=FormStartPosition.CenterParent;Size=new Size(620,600);var print=new Button{Text="Imprimir / Salvar PDF",Location=new Point(18,14),Size=new Size(150,32)};print.Click+=(s,e)=>_browser.ShowPrintDialog();Controls.Add(print);_browser.Location=new Point(18,56);_browser.Size=new Size(565,490);_browser.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;decimal total=0;string lines="";foreach(DataRow r in items.Rows){var value=Convert.ToDecimal(r["Total"]);total+=value;lines+="<tr><td>"+System.Web.HttpUtility.HtmlEncode(Convert.ToString(r["Descrição"]))+"</td><td>"+r["Qtd."]+"</td><td>"+value.ToString("C2")+"</td></tr>";}_browser.DocumentText="<html><body style='font-family:Arial;width:300px'><h2>RMC Flow Comércio Local</h2><b>RECIBO DE VENDA</b><p>"+number+"</p><table border='1' cellspacing='0' cellpadding='5' style='border-collapse:collapse;width:100%'><tr><th>Item</th><th>Qtd.</th><th>Total</th></tr>"+lines+"</table><p>Pagamento: "+payment+"</p><h3>Total: "+Math.Max(0,total-discount).ToString("C2")+"</h3><p>Obrigado pela preferência!</p></body></html>";Controls.Add(_browser);} }
+    {
+        private readonly WebBrowser _browser = new WebBrowser();
+        public SaleReceiptForm(LocalDatabase database, string number)
+        {
+            Text = "Comprovante da venda " + number; StartPosition = FormStartPosition.CenterParent; Size = new Size(760, 720); MinimumSize = new Size(600, 500);
+            var print = new Button { Text = "Imprimir / Salvar PDF", Location = new Point(18, 14), Size = new Size(170, 32) };
+            print.Click += (s, e) => _browser.ShowPrintDialog(); Controls.Add(print);
+            _browser.Location = new Point(18, 56); _browser.Size = new Size(710, 610); _browser.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; Controls.Add(_browser);
+            var header = database.GetSaleHeader(number); var items = database.GetSaleItems(number);
+            if (header.Rows.Count == 0) { _browser.DocumentText = "<html><body>Venda não encontrada.</body></html>"; return; }
+            var sale = header.Rows[0]; Func<string, string> enc = value => System.Web.HttpUtility.HtmlEncode(value ?? "");
+            string company = enc(database.Get("company_trade_name") ?? "RMC Flow Comércio Local");
+            string logo = database.Get("company_logo_base64"); string mime = enc(database.Get("company_logo_mime") ?? "image/png");
+            string logoHtml = string.IsNullOrWhiteSpace(logo) ? "" : "<img style='max-width:110px;max-height:70px;float:right' src='data:" + mime + ";base64," + logo + "' />";
+            string lines = "";
+            foreach (DataRow row in items.Rows)
+            {
+                decimal qty = Convert.ToDecimal(row["quantity"]), unit = Convert.ToDecimal(row["unit_price"]), lineTotal = Convert.ToDecimal(row["total"]);
+                lines += "<tr><td>" + enc(Convert.ToString(row["description"])) + "</td><td class='num'>" + qty.ToString("0.###") + "</td><td class='num'>" + unit.ToString("C2") + "</td><td class='num'>" + lineTotal.ToString("C2") + "</td></tr>";
+            }
+            string customer = enc(Convert.ToString(sale["client_name"]));
+            string customerInfo = "";
+            foreach (string key in new [] { "client_document", "client_phone", "client_email" }) { var value = Convert.ToString(sale[key]); if (!string.IsNullOrWhiteSpace(value)) customerInfo += "<div>" + enc(value) + "</div>"; }
+            string companyInfo = "";
+            foreach (string key in new [] { "company_legal_name", "company_document", "company_phone", "company_email", "company_address" }) { var value = database.Get(key); if (!string.IsNullOrWhiteSpace(value)) companyInfo += "<div>" + enc(value) + "</div>"; }
+            decimal subtotal = Convert.ToDecimal(sale["subtotal"]), discount = Convert.ToDecimal(sale["discount"]), total = Convert.ToDecimal(sale["total"]);
+            string date = enc(Convert.ToString(sale["created_at"]));
+            _browser.DocumentText = "<html><head><meta charset='utf-8'><style>body{font:14px Arial;color:#172b4d;margin:24px}h2{margin:0 0 5px}.muted{color:#667085;font-size:12px}.box{border-bottom:1px solid #ccd5e0;padding:10px 0;margin-bottom:16px}.row{display:flex;justify-content:space-between;margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:8px}th,td{padding:8px;border-bottom:1px solid #d9e0e8;text-align:left}.num{text-align:right}.total{font-size:18px;font-weight:bold}</style></head><body><div class='box'>" + logoHtml + "<h2>" + company + "</h2>" + companyInfo + "</div><div class='row'><div><b>VENDA " + enc(number) + "</b><div class='muted'>" + date + "</div></div><div><b>Status:</b> " + enc(Convert.ToString(sale["status"])) + "</div></div><div class='box'><b>Cliente</b><div>" + customer + "</div>" + customerInfo + "</div><b>Itens da venda</b><table><tr><th>Produto</th><th class='num'>Quantidade</th><th class='num'>Preço unitário</th><th class='num'>Total</th></tr>" + lines + "</table><div style='margin-top:16px;text-align:right'><div>Subtotal: " + subtotal.ToString("C2") + "</div><div>Desconto: " + discount.ToString("C2") + "</div><div class='total'>Total: " + total.ToString("C2") + "</div><div>Pagamento: " + enc(Convert.ToString(sale["payment_method"])) + "</div></div><p class='muted' style='margin-top:28px'>Obrigado pela preferência!</p></body></html>";
+        }
+    }
+
+    internal sealed class SalesHistoryForm : Form
+    {
+        private readonly LocalDatabase _database; private readonly TextBox _search = new TextBox(); private readonly DataGridView _grid = new DataGridView();
+        public SalesHistoryForm(LocalDatabase database) { _database = database; Text = "Vendas realizadas"; StartPosition = FormStartPosition.CenterParent; Size = new Size(900, 570); MinimumSize = new Size(700, 420); Build(); RefreshResults(); }
+        private void Build()
+        {
+            Controls.Add(new Label { Text = "Pesquise pelo número da venda ou nome do cliente:", Location = new Point(18, 18), AutoSize = true });
+            _search.Location = new Point(18, 42); _search.Size = new Size(600, 26); _search.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; _search.TextChanged += (s, e) => RefreshResults(); Controls.Add(_search);
+            _grid.Location = new Point(18, 82); _grid.Size = new Size(845, 390); _grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; _grid.ReadOnly = true; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; _grid.MultiSelect = false; _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _grid.BackgroundColor = Color.White; _grid.DoubleClick += (s, e) => OpenReceipt(); Controls.Add(_grid);
+            var open = new Button { Text = "Abrir / imprimir comprovante", Location = new Point(670, 490), Size = new Size(190, 34), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; open.Click += (s, e) => OpenReceipt(); Controls.Add(open);
+        }
+        private void RefreshResults() { _grid.DataSource = _database.FindSales(_search.Text.Trim()); }
+        private void OpenReceipt()
+        {
+            if (_grid.CurrentRow == null) { MessageBox.Show("Selecione uma venda."); return; }
+            var number = Convert.ToString(_grid.CurrentRow.Cells["Venda"].Value);
+            using (var receipt = new SaleReceiptForm(_database, number)) receipt.ShowDialog(this);
+        }
+    }
 
     internal sealed class ClientEditor : Form
     {
@@ -1157,11 +1213,38 @@ namespace RMCFlowComercioLocal
 
     internal sealed class CompanySettingsForm : Form
     {
-        private readonly LocalDatabase _database;private readonly TextBox _tradeName=new TextBox();private readonly TextBox _legalName=new TextBox();private readonly TextBox _document=new TextBox();private readonly TextBox _phone=new TextBox();private readonly TextBox _email=new TextBox();private readonly TextBox _address=new TextBox();
-        public CompanySettingsForm(LocalDatabase database){_database=database;Text="Dados da empresa";StartPosition=FormStartPosition.CenterParent;Size=new Size(540,510);MinimumSize=new Size(540,510);Build();}
-        private void Build(){Add("Nome fantasia *",_tradeName,22);Add("Razão social",_legalName,78);Add("CNPJ / CPF",_document,134);Add("Telefone / WhatsApp",_phone,190);Add("E-mail",_email,246);Add("Endereço",_address,302);_tradeName.Text=_database.Get("company_trade_name")??"";_legalName.Text=_database.Get("company_legal_name")??"";_document.Text=_database.Get("company_document")??"";_phone.Text=_database.Get("company_phone")??"";_email.Text=_database.Get("company_email")??"";_address.Text=_database.Get("company_address")??"";var save=new Button{Text="Salvar dados",Location=new Point(350,405),Size=new Size(140,34)};save.Click+=Save;Controls.Add(save);}
-        private void Add(string label,TextBox field,int y){Controls.Add(new Label{Text=label,Location=new Point(25,y),AutoSize=true});field.Location=new Point(25,y+20);field.Size=new Size(465,24);Controls.Add(field);}
-        private void Save(object sender,EventArgs e){if(string.IsNullOrWhiteSpace(_tradeName.Text)){MessageBox.Show("Informe o nome fantasia da empresa.");return;}_database.Set("company_trade_name",_tradeName.Text.Trim());_database.Set("company_legal_name",_legalName.Text.Trim());_database.Set("company_document",_document.Text.Trim());_database.Set("company_phone",_phone.Text.Trim());_database.Set("company_email",_email.Text.Trim());_database.Set("company_address",_address.Text.Trim());DialogResult=DialogResult.OK;}
+        private readonly LocalDatabase _database; private readonly TextBox _tradeName = new TextBox(); private readonly TextBox _legalName = new TextBox(); private readonly TextBox _document = new TextBox(); private readonly TextBox _phone = new TextBox(); private readonly TextBox _email = new TextBox(); private readonly TextBox _address = new TextBox(); private readonly Label _logoStatus = new Label(); private string _logoBase64; private string _logoMime;
+        public CompanySettingsForm(LocalDatabase database) { _database = database; Text = "Dados da empresa"; StartPosition = FormStartPosition.CenterParent; Size = new Size(560, 650); MinimumSize = new Size(560, 650); Build(); }
+        private void Build()
+        {
+            Add("Nome fantasia *", _tradeName, 22); Add("Razão social", _legalName, 78); Add("CNPJ / CPF", _document, 134); Add("Telefone / WhatsApp", _phone, 190); Add("E-mail", _email, 246); Add("Endereço", _address, 302);
+            _tradeName.Text = _database.Get("company_trade_name") ?? ""; _legalName.Text = _database.Get("company_legal_name") ?? ""; _document.Text = _database.Get("company_document") ?? ""; _phone.Text = _database.Get("company_phone") ?? ""; _email.Text = _database.Get("company_email") ?? ""; _address.Text = _database.Get("company_address") ?? "";
+            _logoBase64 = _database.Get("company_logo_base64"); _logoMime = _database.Get("company_logo_mime") ?? "image/png";
+            Controls.Add(new Label { Text = "Logo da empresa (PNG ou JPG, até 2 MB)", Location = new Point(25, 360), AutoSize = true });
+            _logoStatus.Text = string.IsNullOrWhiteSpace(_logoBase64) ? "Nenhuma logo selecionada" : "Logo cadastrada"; _logoStatus.Location = new Point(25, 390); _logoStatus.AutoSize = true; Controls.Add(_logoStatus);
+            var choose = new Button { Text = "Selecionar logo...", Location = new Point(25, 420), Size = new Size(145, 32) }; choose.Click += ChooseLogo; Controls.Add(choose);
+            var remove = new Button { Text = "Remover logo", Location = new Point(180, 420), Size = new Size(120, 32) }; remove.Click += (s, e) => { _logoBase64 = null; _logoMime = null; _logoStatus.Text = "Nenhuma logo selecionada"; }; Controls.Add(remove);
+            var save = new Button { Text = "Salvar dados", Location = new Point(365, 540), Size = new Size(140, 34), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; save.Click += Save; Controls.Add(save);
+        }
+        private void ChooseLogo(object sender, EventArgs e)
+        {
+            using (var dialog = new OpenFileDialog { Filter = "Imagens PNG e JPEG|*.png;*.jpg;*.jpeg", Title = "Selecionar logo da empresa" })
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK) return;
+                var info = new System.IO.FileInfo(dialog.FileName);
+                if (info.Length > 2 * 1024 * 1024) { MessageBox.Show("A logo deve ter no máximo 2 MB."); return; }
+                string ext = System.IO.Path.GetExtension(dialog.FileName).ToLowerInvariant();
+                if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") { MessageBox.Show("Selecione um arquivo PNG ou JPG."); return; }
+                _logoBase64 = Convert.ToBase64String(System.IO.File.ReadAllBytes(dialog.FileName)); _logoMime = ext == ".png" ? "image/png" : "image/jpeg"; _logoStatus.Text = "Logo selecionada: " + System.IO.Path.GetFileName(dialog.FileName);
+            }
+        }
+        private void Add(string label, TextBox field, int y) { Controls.Add(new Label { Text = label, Location = new Point(25, y), AutoSize = true }); field.Location = new Point(25, y + 20); field.Size = new Size(485, 24); Controls.Add(field); }
+        private void Save(object sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(_tradeName.Text)) { MessageBox.Show("Informe o nome fantasia da empresa."); return; }
+            _database.Set("company_trade_name", _tradeName.Text.Trim()); _database.Set("company_legal_name", _legalName.Text.Trim()); _database.Set("company_document", _document.Text.Trim()); _database.Set("company_phone", _phone.Text.Trim()); _database.Set("company_email", _email.Text.Trim()); _database.Set("company_address", _address.Text.Trim());
+            _database.Set("company_logo_base64", _logoBase64 ?? ""); _database.Set("company_logo_mime", _logoMime ?? ""); DialogResult = DialogResult.OK;
+        }
     }
 
     internal sealed class WarrantyForm : Form
