@@ -966,6 +966,24 @@ ORDER BY 9, 2, 3;");
             AddAudit("sale_saved", number);
         }
 
+        public DataTable FindSales(string search)
+        {
+            var value = (search ?? string.Empty).Replace("'", "''");
+            return Query("SELECT sales.id AS 'Código', sales.number AS 'Venda', COALESCE(clients.name,'Consumidor não identificado') AS 'Cliente', sales.status AS 'Status', COALESCE(sales.payment_method,'') AS 'Pagamento', printf('R$ %.2f',sales.total) AS 'Total', substr(sales.created_at,1,19) AS 'Data' FROM sales LEFT JOIN clients ON clients.id=sales.client_id WHERE sales.number LIKE '%" + value + "%' OR COALESCE(clients.name,'') LIKE '%" + value + "%' ORDER BY sales.id DESC;");
+        }
+
+        public DataTable GetSaleHeader(string number)
+        {
+            var value = (number ?? string.Empty).Replace("'", "''");
+            return Query("SELECT sales.number, sales.status, sales.subtotal, sales.discount, sales.total, COALESCE(sales.payment_method,'') AS payment_method, sales.created_at, COALESCE(clients.name,'Consumidor não identificado') AS client_name, COALESCE(clients.document,'') AS client_document, COALESCE(clients.phone,'') AS client_phone, COALESCE(clients.email,'') AS client_email FROM sales LEFT JOIN clients ON clients.id=sales.client_id WHERE sales.number='" + value + "' LIMIT 1;");
+        }
+
+        public DataTable GetSaleItems(string number)
+        {
+            var value = (number ?? string.Empty).Replace("'", "''");
+            return Query("SELECT sale_items.description, sale_items.quantity, sale_items.unit_price, sale_items.total FROM sale_items INNER JOIN sales ON sales.id=sale_items.sale_id WHERE sales.number='" + value + "' ORDER BY sale_items.id;");
+        }
+
         public DataTable GetPurchases()
         {
             return Query("SELECT id AS 'Código', number AS 'Compra', supplier_name AS 'Fornecedor', COALESCE(invoice_number,'') AS 'NF / documento', substr(purchased_at,1,10) AS 'Data', printf('R$ %.2f',total) AS 'Total', CASE WHEN payable_generated=1 THEN 'Sim' ELSE 'Não' END AS 'Conta a pagar', COALESCE(status,'Finalizada') AS 'Status' FROM purchases ORDER BY id DESC;");
