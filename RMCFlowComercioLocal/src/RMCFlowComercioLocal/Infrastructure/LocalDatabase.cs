@@ -498,6 +498,17 @@ FROM vehicles INNER JOIN clients ON clients.id = vehicles.client_id ORDER BY cli
 FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id INNER JOIN vehicles ON vehicles.id=work_orders.vehicle_id WHERE (work_orders.number LIKE '%" + value + "%' OR clients.name LIKE '%" + value + "%' OR vehicles.model LIKE '%" + value + "%' OR COALESCE(vehicles.plate,'') LIKE '%" + value + "%')" + statusClause + fromClause + toClause + " ORDER BY work_orders.id DESC;");
         }
 
+        public DataTable FindAppointments(string search, string status, DateTime? fromDate, DateTime? toDate)
+        {
+            var value=(search??string.Empty).Replace("'","''");
+            var statusClause=string.IsNullOrWhiteSpace(status)||status=="Todos"?string.Empty:" AND appointments.status='"+status.Replace("'","''")+"'";
+            var fromClause=fromDate.HasValue?" AND substr(appointments.scheduled_at,1,10)>='"+fromDate.Value.ToString("yyyy-MM-dd")+"'":string.Empty;
+            var toClause=toDate.HasValue?" AND substr(appointments.scheduled_at,1,10)<='"+toDate.Value.ToString("yyyy-MM-dd")+"'":string.Empty;
+            return Query(@"SELECT appointments.id AS 'Código', appointments.scheduled_at AS 'Data e hora', clients.name AS 'Cliente', vehicles.type || ' ' || COALESCE(vehicles.manufacturer, '') || ' ' || vehicles.model AS 'Equipamento', appointments.service_description AS 'Serviço previsto', appointments.status AS 'Status', COALESCE(work_orders.number,'') AS 'OS gerada', COALESCE(appointments.notes,'') AS 'Observações'
+FROM appointments INNER JOIN clients ON clients.id=appointments.client_id INNER JOIN vehicles ON vehicles.id=appointments.vehicle_id LEFT JOIN work_orders ON work_orders.id=appointments.work_order_id
+WHERE (CAST(appointments.id AS TEXT) LIKE '%"+value+"%' OR clients.name LIKE '%"+value+"%' OR COALESCE(vehicles.type,'') LIKE '%"+value+"%' OR COALESCE(vehicles.manufacturer,'') LIKE '%"+value+"%' OR vehicles.model LIKE '%"+value+"%' OR COALESCE(vehicles.plate,'') LIKE '%"+value+"%' OR appointments.service_description LIKE '%"+value+"%')"+statusClause+fromClause+toClause+" ORDER BY appointments.scheduled_at, appointments.id DESC;");
+        }
+
         public DataTable GetAppointments()
         {
             return Query(@"SELECT appointments.id AS 'Código', appointments.scheduled_at AS 'Data e hora', clients.name AS 'Cliente', vehicles.type || ' ' || COALESCE(vehicles.manufacturer, '') || ' ' || vehicles.model AS 'Equipamento', appointments.service_description AS 'Serviço previsto', appointments.status AS 'Status', COALESCE(work_orders.number,'') AS 'OS gerada', COALESCE(appointments.notes,'') AS 'Observações'
@@ -511,8 +522,8 @@ FROM appointments INNER JOIN clients ON clients.id=appointments.client_id INNER 
 
         public DataTable GetAppointmentDocument(long appointmentId)
         {
-            return Query(@"SELECT appointments.id, appointments.scheduled_at, appointments.service_description, appointments.status, clients.name AS client_name, clients.phone AS client_phone, vehicles.type AS vehicle_type, COALESCE(vehicles.manufacturer,'') AS manufacturer, vehicles.model, COALESCE(vehicles.plate,'') AS plate
-FROM appointments INNER JOIN clients ON clients.id=appointments.client_id INNER JOIN vehicles ON vehicles.id=appointments.vehicle_id WHERE appointments.id=" + appointmentId + ";");
+            return Query(@"SELECT appointments.id, appointments.scheduled_at, appointments.service_description, appointments.status, COALESCE(appointments.notes,'') AS notes, clients.name AS client_name, clients.phone AS client_phone, vehicles.type AS vehicle_type, COALESCE(vehicles.manufacturer,'') AS manufacturer, vehicles.model, COALESCE(vehicles.plate,'') AS plate, COALESCE(work_orders.number,'') AS work_order_number
+FROM appointments INNER JOIN clients ON clients.id=appointments.client_id INNER JOIN vehicles ON vehicles.id=appointments.vehicle_id LEFT JOIN work_orders ON work_orders.id=appointments.work_order_id WHERE appointments.id=" + appointmentId + ";");
         }
 
         public void SaveAppointment(long? id, long clientId, long vehicleId, DateTime scheduledAt, string serviceDescription, string notes, string status)
