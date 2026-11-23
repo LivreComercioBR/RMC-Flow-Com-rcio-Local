@@ -132,9 +132,8 @@ namespace RMCFlowComercioLocal
 
         private TabPage DashboardPage()
         {
-            var page = new TabPage("Painel") { BackColor = Color.FromArgb(5, 28, 25), Padding = new Padding(12) };
-            var backdrop = new DashboardGradientPanel { Dock = DockStyle.Fill }; page.Controls.Add(backdrop); backdrop.SendToBack();
-            var hero = new Panel { Location = new Point(38, 18), Size = new Size(904, 92), BackColor = Color.FromArgb(5, 31, 29), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            var page = new TabPage("Painel") { BackColor = Color.FromArgb(5, 28, 25), Padding = new Padding(12), AutoScroll = true, BackgroundImage = CreateDashboardBackground(), BackgroundImageLayout = ImageLayout.Stretch };
+            var hero = new Panel { Name = "dashboard-hero", Location = new Point(38, 18), Size = new Size(904, 92), BackColor = Color.FromArgb(5, 31, 29) };
             hero.Controls.Add(new Label { Text = "Dashboard", Location = new Point(22, 16), AutoSize = true, Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.White });
             hero.Controls.Add(new Label { Text = "Acompanhe os principais indicadores da empresa.", Location = new Point(24, 56), AutoSize = true, Font = new Font("Segoe UI", 11), ForeColor = Color.FromArgb(153, 232, 210) });
             page.Controls.Add(hero);
@@ -153,20 +152,131 @@ namespace RMCFlowComercioLocal
             {
                 AddDashboardCard(page, "Estoque baixo", _dashStock, 503, 235, Color.FromArgb(15, 78, 69), Color.White);
             }
-            var bottom = new Panel { Location=new Point(38,345),Size=new Size(904,135),BackColor=Color.FromArgb(5, 31, 29),Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right };
+            var bottom = new Panel { Name="dashboard-bottom",Location=new Point(38,345),Size=new Size(904,135),BackColor=Color.FromArgb(5, 31, 29) };
             bottom.Controls.Add(new Label { Text="Atenção operacional",Location=new Point(20,18),AutoSize=true,Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.White });
             _dashAlerts.Location=new Point(22,54);_dashAlerts.Size=new Size(450,58);_dashAlerts.Font=new Font("Segoe UI",10);_dashAlerts.ForeColor=Color.FromArgb(205,239,230);bottom.Controls.Add(_dashAlerts);
             var hide = new Button { Text = "Ocultar valores", Location = new Point(500,50), Size = new Size(190,34), BackColor = Color.FromArgb(13, 169, 145), ForeColor = Color.FromArgb(3, 35, 31), FlatStyle = FlatStyle.Flat, TextImageRelation = TextImageRelation.ImageBeforeText, ImageAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleCenter, Image = CreateDashboardEyeIcon(false) };
             hide.Click += (s,e) => { _dashValuesHidden=!_dashValuesHidden; hide.Text=_dashValuesHidden?"Exibir valores":"Ocultar valores"; hide.Image=CreateDashboardEyeIcon(_dashValuesHidden); RefreshDashboard(); }; bottom.Controls.Add(hide);
             var alerts=new Button{Text="Ver alertas financeiros",Location=new Point(710,50),Size=new Size(170,34),BackColor=Color.FromArgb(232,139,37),ForeColor=Color.White,FlatStyle=FlatStyle.Flat};alerts.Click+=(s,e)=>{using(var f=new FinancialAlertsForm(_database))f.ShowDialog(this);RefreshData();};bottom.Controls.Add(alerts);page.Controls.Add(bottom);
+            AddDashboardAccountCards(page);
+            page.Resize += (s,e) => LayoutDashboard(page);
+            LayoutDashboard(page);
             return page;
         }
 
         private static void AddDashboardCard(TabPage page, string title, Label value, int x, int y, Color color, Color foreground)
         {
-            var card = new DashboardCardPanel(color) { Location = new Point(x, y), Size = new Size(210, 92) };
+            var card = new DashboardCardPanel(color) { Location = new Point(x, y), Size = new Size(210, 92), Tag = title };
             card.Controls.Add(new Label { Text = title, Location = new Point(14, 13), AutoSize = true, Font = new Font("Segoe UI", 10), ForeColor = foreground });
             value.Location = new Point(14, 43); value.AutoSize = true; value.Font = new Font("Segoe UI", 17, FontStyle.Bold); value.ForeColor = foreground; card.Controls.Add(value); page.Controls.Add(card);
+        }
+
+        private static Bitmap CreateDashboardBackground()
+        {
+            var bitmap = new Bitmap(1200, 760);
+            using (var graphics = Graphics.FromImage(bitmap))
+            using (var brush = new LinearGradientBrush(new Rectangle(0, 0, bitmap.Width, bitmap.Height), Color.FromArgb(0, 103, 86), Color.FromArgb(0, 91, 78), LinearGradientMode.Horizontal))
+            {
+                brush.InterpolationColors = new ColorBlend
+                {
+                    Colors = new[] { Color.FromArgb(0, 103, 86), Color.FromArgb(5, 27, 25), Color.FromArgb(0, 91, 78) },
+                    Positions = new[] { 0f, 0.52f, 1f }
+                };
+                graphics.FillRectangle(brush, 0, 0, bitmap.Width, bitmap.Height);
+            }
+            return bitmap;
+        }
+
+        private void AddDashboardAccountCards(TabPage page)
+        {
+            var license = new DashboardCardPanel(Color.FromArgb(9, 55, 49)) { Name = "dashboard-license", Location = new Point(38, 495), Size = new Size(446, 86) };
+            var licenseTitle = new Label { Text = "▸ Minha licença", Location = new Point(14, 10), AutoSize = true, Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.White, Cursor = Cursors.Hand };
+            var licenseSummary = new Label { Text = "RMC Flow Comércio Local • Licença permanente", Location = new Point(14, 34), AutoSize = true, Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(153, 232, 210), Cursor = Cursors.Hand };
+            var licenseDetails = new Panel { Location = new Point(14, 61), Size = new Size(418, 78), Visible = false };
+            licenseDetails.Controls.Add(new Label { Text = "Edição local • Licença permanente", Location = new Point(0, 0), AutoSize = true, ForeColor = Color.White });
+            licenseDetails.Controls.Add(new Label { Text = "Ativação: " + (_database.IsActivated() ? "Ativa" : "Pendente"), Location = new Point(0, 21), AutoSize = true, ForeColor = Color.White });
+            var upgrade = new Button { Text = "Fazer upgrade para a versão Cloud", Location = new Point(0, 43), Size = new Size(245, 30), BackColor = Color.FromArgb(13, 169, 145), ForeColor = Color.FromArgb(3, 35, 31), FlatStyle = FlatStyle.Flat };
+            upgrade.Click += (s,e) => System.Diagnostics.Process.Start("https://sistema.comercio.cloud.rmcsites.com.br/");
+            licenseDetails.Controls.Add(upgrade); license.Controls.Add(licenseTitle); license.Controls.Add(licenseSummary); license.Controls.Add(licenseDetails);
+            var licenseView = new Button { Text = "Ver dados", Location = new Point(340, 8), Size = new Size(92, 28), BackColor = Color.FromArgb(201, 238, 222), ForeColor = Color.FromArgb(5, 48, 39), FlatStyle = FlatStyle.Flat };
+            EventHandler toggleLicense = (s,e) => { licenseDetails.Visible = !licenseDetails.Visible; license.Height = licenseDetails.Visible ? 151 : 86; licenseTitle.Text = (licenseDetails.Visible ? "▾ " : "▸ ") + "Minha licença"; licenseView.Text = licenseDetails.Visible ? "Ocultar" : "Ver dados"; license.Invalidate(); LayoutDashboard(page); };
+            licenseView.Click += toggleLicense; licenseTitle.Click += toggleLicense; licenseSummary.Click += toggleLicense; license.Controls.Add(licenseView); page.Controls.Add(license);
+
+            var support = new DashboardCardPanel(Color.FromArgb(9, 55, 49)) { Name = "dashboard-support", Location = new Point(496, 495), Size = new Size(446, 86) };
+            var supportTitle = new Label { Text = "▸ Precisa de suporte?", Location = new Point(14, 10), AutoSize = true, Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.White, Cursor = Cursors.Hand };
+            var supportSummary = new Label { Text = "E-mail e WhatsApp da RMC Sites", Location = new Point(14, 34), AutoSize = true, Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(153, 232, 210), Cursor = Cursors.Hand };
+            var supportDetails = new Panel { Location = new Point(14, 61), Size = new Size(418, 78), Visible = false };
+            supportDetails.Controls.Add(new Label { Text = "Fale com a equipe da RMC Sites se tiver dúvidas ou precisar de ajuda.", Location = new Point(0, 0), Size = new Size(405, 20), ForeColor = Color.White });
+            var email = new LinkLabel { Text = "contato@rmcsites.com.br", Location = new Point(0, 27), AutoSize = true, LinkColor = Color.White, ActiveLinkColor = Color.FromArgb(13, 220, 170) };
+            email.Click += (s,e) => System.Diagnostics.Process.Start("mailto:contato@rmcsites.com.br"); supportDetails.Controls.Add(email);
+            var whatsapp = new Button { Text = "Falar pelo WhatsApp", Location = new Point(175, 25), Size = new Size(190, 38), BackColor = Color.FromArgb(0, 200, 126), ForeColor = Color.FromArgb(2, 33, 28), FlatStyle = FlatStyle.Flat, Image = CreateWhatsAppIcon(30), ImageAlign = ContentAlignment.MiddleLeft, TextImageRelation = TextImageRelation.ImageBeforeText };
+            whatsapp.Click += (s,e) => System.Diagnostics.Process.Start("https://wa.me/5519990136498"); supportDetails.Controls.Add(whatsapp);
+            support.Controls.Add(supportTitle); support.Controls.Add(supportSummary); support.Controls.Add(supportDetails);
+            EventHandler toggleSupport = (s,e) => { supportDetails.Visible = !supportDetails.Visible; support.Height = supportDetails.Visible ? 151 : 86; supportTitle.Text = (supportDetails.Visible ? "▾ " : "▸ ") + "Precisa de suporte?"; support.Invalidate(); LayoutDashboard(page); };
+            supportTitle.Click += toggleSupport; supportSummary.Click += toggleSupport; page.Controls.Add(support);
+        }
+
+        private static void LayoutDashboard(TabPage page)
+        {
+            var left = Math.Max(16, (page.ClientSize.Width - 904) / 2);
+            var hero = page.Controls["dashboard-hero"]; if (hero != null) hero.Left = left;
+            var bottom = page.Controls["dashboard-bottom"]; if (bottom != null) bottom.Left = left;
+            var hasServiceCards = false;
+            foreach (Control item in page.Controls) if (string.Equals(Convert.ToString(item.Tag), "OS em andamento", StringComparison.Ordinal)) { hasServiceCards = true; break; }
+            foreach (Control control in page.Controls)
+            {
+                var title = Convert.ToString(control.Tag);
+                if (control is DashboardCardPanel)
+                {
+                    switch (title)
+                    {
+                        case "Entradas hoje": control.Left = left; break;
+                        case "Resultado do mês": control.Left = left + 224; break;
+                        case "Dinheiro no caixa": control.Left = left + 448; break;
+                        case "Contas a receber": control.Left = left + 672; break;
+                        case "Contas a pagar": control.Left = left + (hasServiceCards ? 0 : 224); break;
+                        case "OS em andamento": control.Left = left + 224; break;
+                        case "OS prontas": control.Left = left + 448; break;
+                        case "Estoque baixo": control.Left = left + (hasServiceCards ? 672 : 448); break;
+                    }
+                }
+            }
+            var license = page.Controls["dashboard-license"]; if (license != null) license.Left = left;
+            var support = page.Controls["dashboard-support"]; if (support != null) support.Left = left + 458;
+        }
+
+        private static Bitmap CreateWhatsAppIcon(int size)
+        {
+            var image = new Bitmap(size, size);
+            using (var graphics = Graphics.FromImage(image))
+            using (var white = new SolidBrush(Color.White))
+            using (var green = new SolidBrush(Color.FromArgb(0, 200, 126)))
+            using (var phone = new SolidBrush(Color.White))
+            {
+                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                graphics.Clear(Color.Transparent);
+                using (var bubble = new GraphicsPath())
+                {
+                    bubble.AddEllipse(size * 0.08f, size * 0.04f, size * 0.84f, size * 0.84f);
+                    bubble.AddPolygon(new[] { new PointF(size * 0.15f, size * 0.68f), new PointF(size * 0.08f, size * 0.96f), new PointF(size * 0.38f, size * 0.81f) });
+                    graphics.FillPath(white, bubble);
+                }
+                graphics.FillEllipse(green, size * 0.17f, size * 0.13f, size * 0.66f, size * 0.66f);
+                using (var handset = new GraphicsPath())
+                {
+                    handset.StartFigure();
+                    handset.AddBezier(size * 0.34f, size * 0.27f, size * 0.27f, size * 0.23f, size * 0.23f, size * 0.32f, size * 0.27f, size * 0.43f);
+                    handset.AddBezier(size * 0.27f, size * 0.43f, size * 0.34f, size * 0.58f, size * 0.48f, size * 0.69f, size * 0.60f, size * 0.72f);
+                    handset.AddBezier(size * 0.60f, size * 0.72f, size * 0.71f, size * 0.75f, size * 0.78f, size * 0.67f, size * 0.72f, size * 0.60f);
+                    handset.AddLine(size * 0.72f, size * 0.60f, size * 0.62f, size * 0.54f);
+                    handset.AddBezier(size * 0.62f, size * 0.54f, size * 0.58f, size * 0.52f, size * 0.55f, size * 0.58f, size * 0.51f, size * 0.61f);
+                    handset.AddBezier(size * 0.51f, size * 0.61f, size * 0.44f, size * 0.57f, size * 0.37f, size * 0.49f, size * 0.35f, size * 0.43f);
+                    handset.AddBezier(size * 0.35f, size * 0.43f, size * 0.40f, size * 0.39f, size * 0.42f, size * 0.35f, size * 0.39f, size * 0.32f);
+                    handset.CloseFigure();
+                    graphics.FillPath(phone, handset);
+                }
+            }
+            return image;
         }
 
         private static Bitmap CreateDashboardEyeIcon(bool hidden)
@@ -635,21 +745,6 @@ namespace RMCFlowComercioLocal
         }
         private void RefreshItems() { _items.DataSource = _database.GetWorkOrderItems(_workOrderId); if (_items.Columns["Código"] != null) _items.Columns["Código"].Visible = false; _total.Text = "Subtotal da OS: " + _database.GetWorkOrderSubtotal(_workOrderId).ToString("C2"); }
         private void DeleteSelected(object sender, EventArgs e) { if (_items.CurrentRow == null) { MessageBox.Show("Selecione um item."); return; } if (MessageBox.Show("Excluir o item selecionado?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes) { _database.DeleteWorkOrderItem(Convert.ToInt64(_items.CurrentRow.Cells["Código"].Value)); RefreshItems(); } }
-    }
-
-    internal sealed class DashboardGradientPanel : Panel
-    {
-        public DashboardGradientPanel() { DoubleBuffered = true; }
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            if (ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
-            using (var brush = new LinearGradientBrush(ClientRectangle, Color.FromArgb(0, 104, 88), Color.FromArgb(3, 27, 25), LinearGradientMode.Horizontal))
-            {
-                var blend = new ColorBlend { Colors = new[] { Color.FromArgb(0, 103, 86), Color.FromArgb(5, 27, 25), Color.FromArgb(0, 91, 78) }, Positions = new[] { 0f, 0.52f, 1f } };
-                brush.InterpolationColors = blend;
-                e.Graphics.FillRectangle(brush, ClientRectangle);
-            }
-        }
     }
 
     internal sealed class DashboardCardPanel : Panel
