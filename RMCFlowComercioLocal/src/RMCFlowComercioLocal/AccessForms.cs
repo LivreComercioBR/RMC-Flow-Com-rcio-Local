@@ -80,7 +80,7 @@ namespace RMCFlowComercioLocal
         {
             _database = database; _user = user;
             Text = "Alterar e-mail de acesso"; StartPosition = FormStartPosition.CenterParent;
-            Size = new Size(500, 340); MinimumSize = new Size(500, 340);
+            Size = new Size(540, 420); MinimumSize = new Size(540, 420); AutoScaleMode = AutoScaleMode.Font;
             Build();
         }
 
@@ -89,11 +89,11 @@ namespace RMCFlowComercioLocal
             Controls.Add(new Label { Text = "E-mail atual: " + _user.Email, Location = new Point(24, 22), AutoSize = true });
             Controls.Add(new Label { Text = "Informe o novo endereço e confirme com sua senha atual.", Location = new Point(24, 55), AutoSize = true });
             Controls.Add(new Label { Text = "Novo e-mail de acesso", Location = new Point(24, 105), AutoSize = true });
-            _email.Location = new Point(24, 128); _email.Size = new Size(435, 26); _email.Text = _user.Email; Controls.Add(_email);
+            _email.Location = new Point(24, 128); _email.Size = new Size(475, 26); _email.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; _email.Text = _user.Email; Controls.Add(_email);
             Controls.Add(new Label { Text = "Senha de acesso", Location = new Point(24, 177), AutoSize = true });
-            _password.Location = new Point(24, 200); _password.Size = new Size(435, 26); _password.UseSystemPasswordChar = true; Controls.Add(_password);
-            Controls.Add(new Label { Text = "A confirmação será feita pela senha. Nenhum e-mail será enviado ao endereço antigo.", Location = new Point(24, 240), Size = new Size(435, 38) });
-            var save = new Button { Text = "Confirmar alteração", Location = new Point(305, 285), Size = new Size(154, 32), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
+            _password.Location = new Point(24, 200); _password.Size = new Size(475, 26); _password.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; _password.UseSystemPasswordChar = true; Controls.Add(_password);
+            Controls.Add(new Label { Text = "A confirmação será feita pela senha. Nenhum e-mail será enviado ao endereço antigo.", Location = new Point(24, 240), Size = new Size(475, 38), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right });
+            var save = new Button { Text = "Confirmar alteração", Location = new Point(345, 330), Size = new Size(154, 32), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
             save.Click += Save; Controls.Add(save);
         }
 
