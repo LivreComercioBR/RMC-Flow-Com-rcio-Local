@@ -17,6 +17,10 @@ namespace RMCFlowComercioLocal
         private readonly TextBox _clientSearch = new TextBox();
         private readonly TextBox _vehicleSearch = new TextBox();
         private readonly DataGridView _appointments = Grid();
+        private readonly TextBox _appointmentSearch = new TextBox();
+        private readonly ComboBox _appointmentStatus = new ComboBox();
+        private readonly DateTimePicker _appointmentFrom = new DateTimePicker();
+        private readonly DateTimePicker _appointmentTo = new DateTimePicker();
         private readonly DataGridView _workOrders = Grid();
         private readonly ComboBox _workOrderStatus = new ComboBox();
         private readonly TextBox _workOrderSearch = new TextBox();
@@ -372,7 +376,16 @@ namespace RMCFlowComercioLocal
             page.Controls.Add(TopButton("Cancelar", 440, (s,e) => CancelAppointment()));
             page.Controls.Add(TopButton("Gerar OS", 560, (s,e) => ConvertAppointment()));
             page.Controls.Add(TopButton("WhatsApp", 680, (s,e) => SendAppointmentWhatsApp()));
-            _appointments.Location=new Point(18,62); _appointments.Size=new Size(960,420); _appointments.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right; page.Controls.Add(_appointments);
+            page.Controls.Add(TopButton("Ver Agendamento", 810, (s,e) => ViewAppointment()));
+            page.Controls.Add(new Label { Text="Cliente / equipamento / serviço:", Location=new Point(18,68), AutoSize=true });
+            _appointmentSearch.Location=new Point(215,64); _appointmentSearch.Size=new Size(250,24); _appointmentSearch.TextChanged+=(s,e)=>RefreshAppointmentSearch(); page.Controls.Add(_appointmentSearch);
+            page.Controls.Add(new Label { Text="De:", Location=new Point(475,68), AutoSize=true });
+            ConfigureFilterDate(_appointmentFrom,new Point(505,64),115,RefreshAppointmentSearch); page.Controls.Add(_appointmentFrom);
+            page.Controls.Add(new Label { Text="Até:", Location=new Point(628,68), AutoSize=true });
+            ConfigureFilterDate(_appointmentTo,new Point(660,64),115,RefreshAppointmentSearch); page.Controls.Add(_appointmentTo);
+            page.Controls.Add(new Label { Text="Status:", Location=new Point(790,68), AutoSize=true });
+            _appointmentStatus.Items.AddRange(new object[]{"Todos","Agendado","Confirmado","Cancelado","Convertido"}); _appointmentStatus.Text="Todos"; _appointmentStatus.Location=new Point(835,64); _appointmentStatus.Size=new Size(125,24); _appointmentStatus.SelectedIndexChanged+=(s,e)=>RefreshAppointmentSearch(); page.Controls.Add(_appointmentStatus);
+            _appointments.Location=new Point(18,100); _appointments.Size=new Size(960,382); _appointments.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right; page.Controls.Add(_appointments);
             return page;
         }
 
@@ -510,7 +523,7 @@ namespace RMCFlowComercioLocal
         private void RefreshData()
         {
             var clients = _database.FindClients(_clientSearch.Text.Trim()); var vehicles = _database.FindVehicles(_vehicleSearch.Text.Trim()); var orders = _database.FindWorkOrders(string.IsNullOrEmpty(_workOrderStatus.Text)?"Todos":_workOrderStatus.Text,_workOrderSearch.Text.Trim(),OptionalFilterDate(_workOrderFrom),OptionalFilterDate(_workOrderTo));
-            _clients.DataSource = clients; _vehicles.DataSource = vehicles; _appointments.DataSource=_database.GetAppointments(); _workOrders.DataSource = orders; _quotes.DataSource = _database.FindQuotes(string.IsNullOrEmpty(_quoteStatus.Text)?"Todos":_quoteStatus.Text,_quoteSearch.Text.Trim(),OptionalFilterDate(_quoteFrom),OptionalFilterDate(_quoteTo)); _products.DataSource = _database.FindProductsForList(_productSearch.Text.Trim()); _services.DataSource = _database.FindServicesForList(_serviceSearch.Text.Trim()); _stockMovements.DataSource = _database.GetStockMovements(); _financial.DataSource = _database.FindFinancialEntries(string.IsNullOrEmpty(_financialStatus.Text) ? "Todos" : _financialStatus.Text, _financialSearch.Text.Trim()); ConfigureFinancialGrid(); _purchases.DataSource=_database.GetPurchases(); _suppliers.DataSource=_database.GetSuppliers(); _debtors.DataSource=_database.GetDebtors(); _financialCategories.DataSource=_database.GetFinancialCategories();
+            _clients.DataSource = clients; _vehicles.DataSource = vehicles; _appointments.DataSource=_database.FindAppointments(_appointmentSearch.Text.Trim(), string.IsNullOrEmpty(_appointmentStatus.Text) ? "Todos" : _appointmentStatus.Text, OptionalFilterDate(_appointmentFrom), OptionalFilterDate(_appointmentTo)); _workOrders.DataSource = orders; _quotes.DataSource = _database.FindQuotes(string.IsNullOrEmpty(_quoteStatus.Text)?"Todos":_quoteStatus.Text,_quoteSearch.Text.Trim(),OptionalFilterDate(_quoteFrom),OptionalFilterDate(_quoteTo)); _products.DataSource = _database.FindProductsForList(_productSearch.Text.Trim()); _services.DataSource = _database.FindServicesForList(_serviceSearch.Text.Trim()); _stockMovements.DataSource = _database.GetStockMovements(); _financial.DataSource = _database.FindFinancialEntries(string.IsNullOrEmpty(_financialStatus.Text) ? "Todos" : _financialStatus.Text, _financialSearch.Text.Trim()); ConfigureFinancialGrid(); _purchases.DataSource=_database.GetPurchases(); _suppliers.DataSource=_database.GetSuppliers(); _debtors.DataSource=_database.GetDebtors(); _financialCategories.DataSource=_database.GetFinancialCategories();
             if (_workOrders.Columns["client_id"] != null) { _workOrders.Columns["client_id"].Visible = false; _workOrders.Columns["vehicle_id"].Visible = false; _workOrders.Columns["estado_entrada"].Visible = false; _workOrders.Columns["acessorios_recebidos"].Visible = false; _workOrders.Columns["reclamacao"].Visible = false; _workOrders.Columns["diagnostico"].Visible = false; _workOrders.Columns["observacoes"].Visible = false; _workOrders.Columns["historico_aprovacao"].Visible = false; }
             if (_quotes.Columns["client_id"] != null) { _quotes.Columns["client_id"].Visible = false; _quotes.Columns["vehicle_id"].Visible = false; _quotes.Columns["reclamacao"].Visible = false; _quotes.Columns["observacoes"].Visible = false; _quotes.Columns["os_convertida"].Visible = false; }
             ConfigureOperationalGrids();
@@ -520,7 +533,8 @@ namespace RMCFlowComercioLocal
 
         private void RefreshWorkOrderSearch(){_workOrders.DataSource=_database.FindWorkOrders(string.IsNullOrEmpty(_workOrderStatus.Text)?"Todos":_workOrderStatus.Text,_workOrderSearch.Text.Trim(),OptionalFilterDate(_workOrderFrom),OptionalFilterDate(_workOrderTo));if(_workOrders.Columns["client_id"]!=null){_workOrders.Columns["client_id"].Visible=false;_workOrders.Columns["vehicle_id"].Visible=false;_workOrders.Columns["estado_entrada"].Visible=false;_workOrders.Columns["acessorios_recebidos"].Visible=false;_workOrders.Columns["reclamacao"].Visible=false;_workOrders.Columns["diagnostico"].Visible=false;_workOrders.Columns["observacoes"].Visible=false;_workOrders.Columns["historico_aprovacao"].Visible=false;}ConfigureWorkOrderGrid();}
         private static DateTime? OptionalFilterDate(DateTimePicker picker){return picker.Checked?picker.Value.Date:(DateTime?)null;}
-        private static void ConfigureFilterDate(DateTimePicker picker,Point location,int width,Action refresh){picker.Format=DateTimePickerFormat.Short;picker.ShowCheckBox=true;picker.Checked=false;picker.Location=location;picker.Size=new Size(width,24);picker.ValueChanged+=(s,e)=>refresh();}
+        private static void ConfigureFilterDate(DateTimePicker picker,Point location,int width,Action refresh){picker.Format=DateTimePickerFormat.Short;picker.ShowCheckBox=true;picker.Checked=false;picker.Location=location;picker.Size=new Size(width,24);picker.ValueChanged+=(s,e)=>refresh();picker.CheckedChanged+=(s,e)=>refresh();}
+        private void RefreshAppointmentSearch(){_appointments.DataSource=_database.FindAppointments(_appointmentSearch.Text.Trim(),string.IsNullOrEmpty(_appointmentStatus.Text)?"Todos":_appointmentStatus.Text,OptionalFilterDate(_appointmentFrom),OptionalFilterDate(_appointmentTo));ConfigureAppointmentGrid();}
         private void RefreshQuoteSearch(){_quotes.DataSource=_database.FindQuotes(string.IsNullOrEmpty(_quoteStatus.Text)?"Todos":_quoteStatus.Text,_quoteSearch.Text.Trim(),OptionalFilterDate(_quoteFrom),OptionalFilterDate(_quoteTo));ConfigureOperationalGrids();}
         private void RefreshClientSearch(){_clients.DataSource=_database.FindClients(_clientSearch.Text.Trim());ConfigureClientGrid();}
         private void RefreshVehicleSearch(){_vehicles.DataSource=_database.FindVehicles(_vehicleSearch.Text.Trim());ConfigureVehicleGrid();}
@@ -572,6 +586,18 @@ namespace RMCFlowComercioLocal
         private void EditVehicle() { var id = SelectedId(_vehicles); if (id == null) return; using (var form = new VehicleEditor(_database, _vehicles.CurrentRow)) form.ShowDialog(this); RefreshData(); }
         private void OpenVehicleHistory() { var id=SelectedId(_vehicles); if(id==null)return; using(var form=new VehicleHistoryForm(_database,id.Value))form.ShowDialog(this); }
         private void EditAppointment() { var id = SelectedId(_appointments); if (id == null) return; if (Convert.ToString(_appointments.CurrentRow.Cells["Status"].Value)=="Convertido") { MessageBox.Show("O agendamento já foi convertido em OS e não pode mais ser alterado."); return; } using (var form = new AppointmentEditor(_database, _appointments.CurrentRow)) form.ShowDialog(this); RefreshData(); }
+        private void ViewAppointment()
+        {
+            var id=SelectedId(_appointments); if(!id.HasValue){MessageBox.Show("Selecione um agendamento para visualizar.");return;}
+            var data=_database.GetAppointmentDocument(id.Value); if(data.Rows.Count==0){MessageBox.Show("Agendamento não encontrado.");return;}
+            var item=data.Rows[0]; DateTime scheduled; var date=DateTime.TryParse(Convert.ToString(item["scheduled_at"]),out scheduled)?scheduled.ToString("dd/MM/yyyy HH:mm") : Convert.ToString(item["scheduled_at"]);
+            var vehicle=Convert.ToString(item["vehicle_type"])+" "+Convert.ToString(item["manufacturer"])+" "+Convert.ToString(item["model"]);
+            var plate=Convert.ToString(item["plate"]); if(!string.IsNullOrWhiteSpace(plate))vehicle+=" • "+plate;
+            var message="Agendamento #"+id.Value+"\nData e hora: "+date+"\nStatus: "+Convert.ToString(item["status"])+"\n\nCliente: "+Convert.ToString(item["client_name"])+"\nTelefone: "+Convert.ToString(item["client_phone"])+"\nEquipamento: "+vehicle+"\n\nServiço previsto: "+Convert.ToString(item["service_description"]);
+            if(data.Columns.Contains("notes")&&!string.IsNullOrWhiteSpace(Convert.ToString(item["notes"])))message+="\n\nObservações: "+Convert.ToString(item["notes"]);
+            if(data.Columns.Contains("work_order_number")&&!string.IsNullOrWhiteSpace(Convert.ToString(item["work_order_number"])))message+="\nOS gerada: "+Convert.ToString(item["work_order_number"]);
+            MessageBox.Show(message,"Detalhes do agendamento",MessageBoxButtons.OK,MessageBoxIcon.Information);
+        }
         private void ConfirmAppointment() { var id=SelectedId(_appointments); if(id==null)return; try { _database.ConfirmAppointment(id.Value); RefreshData(); MessageBox.Show("Atendimento confirmado.", "Agenda"); } catch(Exception ex) { MessageBox.Show(ex.Message, "Agenda", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }
         private void CancelAppointment() { var id = SelectedId(_appointments); if (id == null) return; if (MessageBox.Show("Cancelar o agendamento selecionado?", "Agenda", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes) return; try { _database.CancelAppointment(id.Value); RefreshData(); } catch (Exception ex) { MessageBox.Show(ex.Message, "Agenda", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }
         private void ConvertAppointment() { var id = SelectedId(_appointments); if (id == null) return; if (MessageBox.Show("Gerar uma Ordem de Serviço para este agendamento?", "Agenda", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return; try { var number = _database.ConvertAppointmentToWorkOrder(id.Value); RefreshData(); MessageBox.Show("A " + number + " foi criada. Inclua peças e serviços pelo módulo de OS.", "Agenda"); } catch (Exception ex) { MessageBox.Show(ex.Message, "Agenda", MessageBoxButtons.OK, MessageBoxIcon.Warning); } }
@@ -1523,7 +1549,7 @@ namespace RMCFlowComercioLocal
         {
             _client.DropDownStyle=ComboBoxStyle.DropDownList; _vehicle.DropDownStyle=ComboBoxStyle.DropDownList; _client.SelectedIndexChanged+=(s,e)=>{if(!_changing)LoadVehicles(null);}; _status.Items.AddRange(new object[]{"Agendado","Confirmado","Cancelado"});_status.Text="Agendado"; _scheduled.Format=DateTimePickerFormat.Custom;_scheduled.CustomFormat="dd/MM/yyyy HH:mm";_scheduled.ShowUpDown=true;
             Add("Cliente *",_client,18);_client.Size=new Size(315,24);var searchClient=new Button{Text="Pesquisar cliente",Location=new Point(350,37),Size=new Size(125,27)};searchClient.Click+=(s,e)=>SearchClient();Controls.Add(searchClient);var newClient=new Button{Text="Novo cliente",Location=new Point(485,37),Size=new Size(85,27)};newClient.Click+=(s,e)=>NewClient();Controls.Add(newClient);
-            Add("Equipamento *",_vehicle,74); Add("Data e hora *",_scheduled,130); Add("Status *",_status,186); Add("Serviço previsto *",_service,242); AddLong("Observações",_notes,298);
+            Add("Equipamento *",_vehicle,74); _vehicle.Size=new Size(410,24); var newVehicle=new Button{Text="Novo equipamento",Location=new Point(442,92),Size=new Size(128,28)}; newVehicle.Click+=(s,e)=>NewVehicle(); Controls.Add(newVehicle); Add("Data e hora *",_scheduled,130); Add("Status *",_status,186); Add("Serviço previsto *",_service,242); AddLong("Observações",_notes,298);
             long? clientId=null,vehicleId=null;if(_row!=null){var data=_database.GetAppointmentForEdit(Convert.ToInt64(_row.Cells["Código"].Value));if(data.Rows.Count==0){MessageBox.Show("Agendamento não encontrado.");Close();return;}var item=data.Rows[0];clientId=Convert.ToInt64(item["client_id"]);vehicleId=Convert.ToInt64(item["vehicle_id"]);_status.Text=Convert.ToString(item["status"]);DateTime value;if(DateTime.TryParse(Convert.ToString(item["scheduled_at"]),out value))_scheduled.Value=value;_service.Text=Convert.ToString(item["service_description"]);_notes.Text=Convert.ToString(item["notes"]);}LoadClients(clientId);LoadVehicles(vehicleId);
             var save=new Button{Text="Salvar agendamento",Location=new Point(390,440),Size=new Size(180,34)};save.Click+=Save;Controls.Add(save);
         }
@@ -1535,6 +1561,7 @@ namespace RMCFlowComercioLocal
         private void LoadVehicles(long? selectedId){_changing=true;_vehicle.Items.Clear();var clientId=SelectedId(_client);if(clientId.HasValue){var vehicles=_database.GetVehicleLookupByClient(clientId.Value);foreach(DataRow vehicle in vehicles.Rows)_vehicle.Items.Add(new Option(Convert.ToInt64(vehicle["id"]),Convert.ToString(vehicle["display_name"])));}SelectId(_vehicle,selectedId);if(_vehicle.SelectedIndex<0&&_vehicle.Items.Count>0)_vehicle.SelectedIndex=0;_changing=false;}
         private void SearchClient(){using(var form=new ClientSearchForm(_database)){if(form.ShowDialog(this)==DialogResult.OK){LoadClients(form.SelectedId);LoadVehicles(null);}}}
         private void NewClient(){using(var form=new ClientEditor(_database,null)){if(form.ShowDialog(this)==DialogResult.OK){LoadClients(SelectedId(_client));LoadVehicles(SelectedId(_vehicle));}}}
+        private void NewVehicle(){var clientId=SelectedId(_client);if(!clientId.HasValue){MessageBox.Show("Selecione primeiro um cliente para cadastrar o equipamento.");return;}using(var form=new VehicleEditor(_database,null,clientId)){if(form.ShowDialog(this)==DialogResult.OK)LoadVehicles(form.SavedId);}}
         private void Save(object sender,EventArgs e){var clientId=SelectedId(_client);var vehicleId=SelectedId(_vehicle);if(!clientId.HasValue||!vehicleId.HasValue||string.IsNullOrWhiteSpace(_service.Text)){MessageBox.Show("Informe cliente, equipamento e serviço previsto.");return;}if(!_database.VehicleBelongsToClient(vehicleId.Value,clientId.Value)){MessageBox.Show("O equipamento selecionado não pertence ao cliente escolhido.");return;}_database.SaveAppointment(_row==null?(long?)null:Convert.ToInt64(_row.Cells["Código"].Value),clientId.Value,vehicleId.Value,_scheduled.Value,_service.Text.Trim(),_notes.Text.Trim(),_status.Text);DialogResult=DialogResult.OK;}
     }
 
