@@ -2,6 +2,7 @@
 using System.Data;
 using System.Data.SQLite;
 using System.IO;
+using System.Net.Mail;
 using System.Security.Cryptography;
 
 namespace RMCFlowComercioLocal.Infrastructure
@@ -231,6 +232,7 @@ CASE action
  WHEN 'user_created' THEN 'Usuário criado'
  WHEN 'user_status' THEN 'Status de usuário alterado'
  WHEN 'user_password_changed' THEN 'Senha alterada'
+ WHEN 'user_email_changed' THEN 'E-mail de acesso alterado'
  WHEN 'password_recovery_requested' THEN 'Recuperação de senha solicitada'
  WHEN 'password_recovery_backup' THEN 'Backup de segurança para recuperação'
  WHEN 'administrator_recovered_signed' THEN 'Administrador recuperado por autorização RMC'
@@ -294,6 +296,51 @@ FROM audit_logs ORDER BY id DESC LIMIT 1000;");
         { RequirePermission("settings.users"); 
             using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;")) using (var command = new SQLiteCommand("UPDATE users SET active=@active WHERE id=@id", connection)) { connection.Open(); command.Parameters.AddWithValue("@id", id); command.Parameters.AddWithValue("@active", active ? 1 : 0); command.ExecuteNonQuery(); }
             AddAudit("user_status", id + ": " + active);
+        }
+
+        public void ChangeUserEmail(long id, string email, string currentPassword)
+        {
+            var normalized = (email ?? string.Empty).Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(normalized)) throw new InvalidOperationException("Informe o novo e-mail de acesso.");
+            try
+            {
+                var parsed = new MailAddress(normalized);
+                if (!string.Equals(parsed.Address, normalized, StringComparison.OrdinalIgnoreCase)) throw new FormatException();
+            }
+            catch { throw new InvalidOperationException("Informe um endereço de e-mail válido."); }
+
+            using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    string storedHash = null;
+                    using (var command = new SQLiteCommand("SELECT password_hash FROM users WHERE id=@id AND active=1", connection, transaction))
+                    {
+                        command.Parameters.AddWithValue("@id", id);
+                        storedHash = Convert.ToString(command.ExecuteScalar());
+                    }
+                    if (string.IsNullOrEmpty(storedHash) || !VerifyPassword(currentPassword, storedHash))
+                        throw new InvalidOperationException("A senha de acesso está incorreta.");
+
+                    using (var command = new SQLiteCommand("SELECT COUNT(1) FROM users WHERE lower(email)=@email AND id<>@id", connection, transaction))
+                    {
+                        command.Parameters.AddWithValue("@email", normalized);
+                        command.Parameters.AddWithValue("@id", id);
+                        if (Convert.ToInt32(command.ExecuteScalar()) > 0)
+                            throw new InvalidOperationException("Este e-mail já está cadastrado. Informe outro endereço.");
+                    }
+
+                    using (var command = new SQLiteCommand("UPDATE users SET email=@email WHERE id=@id", connection, transaction))
+                    {
+                        command.Parameters.AddWithValue("@email", normalized);
+                        command.Parameters.AddWithValue("@id", id);
+                        if (command.ExecuteNonQuery() == 0) throw new InvalidOperationException("Usuário não encontrado.");
+                    }
+                    transaction.Commit();
+                }
+            }
+            AddAudit("user_email_changed", id + ": " + normalized);
         }
 
         public void ChangeUserPassword(long id, string password)
