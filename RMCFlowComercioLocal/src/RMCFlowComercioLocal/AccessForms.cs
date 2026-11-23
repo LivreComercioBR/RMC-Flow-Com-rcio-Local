@@ -68,6 +68,50 @@ namespace RMCFlowComercioLocal
         private void Save(object sender,EventArgs e){if(_requireCurrent&&_database.Authenticate(_user.Email,_current.Text)==null){MessageBox.Show("A senha atual está incorreta.");return;}if(_newPassword.Text!=_confirm.Text){MessageBox.Show("A confirmação de senha não confere.");return;}try{_database.ChangeUserPassword(_user.Id,_newPassword.Text);MessageBox.Show("Senha alterada com sucesso.");DialogResult=DialogResult.OK;}catch(Exception ex){MessageBox.Show(ex.Message);}}
     }
 
+    internal sealed class ChangeAccessEmailForm : Form
+    {
+        private readonly LocalDatabase _database;
+        private readonly SystemUser _user;
+        private readonly TextBox _email = new TextBox();
+        private readonly TextBox _password = new TextBox();
+        public string NewEmail { get; private set; }
+
+        public ChangeAccessEmailForm(LocalDatabase database, SystemUser user)
+        {
+            _database = database; _user = user;
+            Text = "Alterar e-mail de acesso"; StartPosition = FormStartPosition.CenterParent;
+            Size = new Size(500, 340); MinimumSize = new Size(500, 340);
+            Build();
+        }
+
+        private void Build()
+        {
+            Controls.Add(new Label { Text = "E-mail atual: " + _user.Email, Location = new Point(24, 22), AutoSize = true });
+            Controls.Add(new Label { Text = "Informe o novo endereço e confirme com sua senha atual.", Location = new Point(24, 55), AutoSize = true });
+            Controls.Add(new Label { Text = "Novo e-mail de acesso", Location = new Point(24, 105), AutoSize = true });
+            _email.Location = new Point(24, 128); _email.Size = new Size(435, 26); _email.Text = _user.Email; Controls.Add(_email);
+            Controls.Add(new Label { Text = "Senha de acesso", Location = new Point(24, 177), AutoSize = true });
+            _password.Location = new Point(24, 200); _password.Size = new Size(435, 26); _password.UseSystemPasswordChar = true; Controls.Add(_password);
+            Controls.Add(new Label { Text = "A confirmação será feita pela senha. Nenhum e-mail será enviado ao endereço antigo.", Location = new Point(24, 240), Size = new Size(435, 38) });
+            var save = new Button { Text = "Confirmar alteração", Location = new Point(305, 285), Size = new Size(154, 32), Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
+            save.Click += Save; Controls.Add(save);
+        }
+
+        private void Save(object sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(_email.Text)) { MessageBox.Show("Informe o novo e-mail de acesso."); return; }
+            if (string.IsNullOrWhiteSpace(_password.Text)) { MessageBox.Show("Informe sua senha de acesso para confirmar a alteração."); return; }
+            try
+            {
+                _database.ChangeUserEmail(_user.Id, _email.Text.Trim(), _password.Text);
+                NewEmail = _email.Text.Trim().ToLowerInvariant();
+                MessageBox.Show("E-mail de acesso alterado com sucesso.");
+                DialogResult = DialogResult.OK;
+            }
+            catch (Exception ex) { MessageBox.Show(ex.Message, "Alterar e-mail", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        }
+    }
+
     internal sealed class AuditLogForm : Form
     {
         private readonly LocalDatabase _database;private readonly DataGridView _grid=new DataGridView();
