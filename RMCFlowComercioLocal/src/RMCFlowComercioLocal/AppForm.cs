@@ -132,27 +132,27 @@ namespace RMCFlowComercioLocal
 
         private TabPage DashboardPage()
         {
-            var page = new TabPage("Painel") { BackColor = Color.FromArgb(5, 28, 25), Padding = new Padding(12), AutoScroll = true, BackgroundImage = CreateDashboardBackground(), BackgroundImageLayout = ImageLayout.Stretch };
-            var hero = new Panel { Name = "dashboard-hero", Location = new Point(38, 18), Size = new Size(904, 92), BackColor = Color.FromArgb(5, 31, 29) };
+            var page = new TabPage("Painel") { BackColor = Color.FromArgb(5, 13, 12), Padding = new Padding(12), AutoScroll = true, BackgroundImage = CreateDashboardBackground(), BackgroundImageLayout = ImageLayout.Stretch };
+            var hero = new DashboardSectionPanel { Name = "dashboard-hero", Location = new Point(38, 18), Size = new Size(904, 92) };
             hero.Controls.Add(new Label { Text = "Dashboard", Location = new Point(22, 16), AutoSize = true, Font = new Font("Segoe UI", 22, FontStyle.Bold), ForeColor = Color.White });
             hero.Controls.Add(new Label { Text = "Acompanhe os principais indicadores da empresa.", Location = new Point(24, 56), AutoSize = true, Font = new Font("Segoe UI", 11), ForeColor = Color.FromArgb(153, 232, 210) });
             page.Controls.Add(hero);
-            AddDashboardCard(page, "Entradas hoje", _dashToday, 55, 126, Color.FromArgb(10, 57, 51), Color.White);
-            AddDashboardCard(page, "Resultado do mês", _dashMonth, 279, 126, Color.FromArgb(12, 69, 61), Color.White);
-            AddDashboardCard(page, "Dinheiro no caixa", _dashCash, 503, 126, Color.FromArgb(132, 218, 177), Color.FromArgb(5, 48, 39));
-            AddDashboardCard(page, "Contas a receber", _dashReceive, 727, 126, Color.FromArgb(15, 78, 69), Color.White);
-            AddDashboardCard(page, "Contas a pagar", _dashPay, ServiceModuleEnabled() ? 55 : 279, 235, Color.FromArgb(145, 225, 187), Color.FromArgb(5, 48, 39));
+            AddDashboardCard(page, "Entradas hoje", _dashToday, 55, 126, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
+            AddDashboardCard(page, "Resultado do mês", _dashMonth, 279, 126, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
+            AddDashboardCard(page, "Dinheiro no caixa", _dashCash, 503, 126, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
+            AddDashboardCard(page, "Contas a receber", _dashReceive, 727, 126, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
+            AddDashboardCard(page, "Contas a pagar", _dashPay, ServiceModuleEnabled() ? 55 : 279, 235, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
             if (ServiceModuleEnabled())
             {
-                AddDashboardCard(page, "OS em andamento", _dashOrders, 279, 235, Color.FromArgb(12, 69, 61), Color.White);
-                AddDashboardCard(page, "OS prontas", _dashReady, 503, 235, Color.FromArgb(132, 218, 177), Color.FromArgb(5, 48, 39));
-                AddDashboardCard(page, "Estoque baixo", _dashStock, 727, 235, Color.FromArgb(15, 78, 69), Color.White);
+                AddDashboardCard(page, "OS em andamento", _dashOrders, 279, 235, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
+                AddDashboardCard(page, "OS prontas", _dashReady, 503, 235, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
+                AddDashboardCard(page, "Estoque baixo", _dashStock, 727, 235, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
             }
             else
             {
-                AddDashboardCard(page, "Estoque baixo", _dashStock, 503, 235, Color.FromArgb(15, 78, 69), Color.White);
+                AddDashboardCard(page, "Estoque baixo", _dashStock, 503, 235, Color.FromArgb(143, 226, 185), Color.FromArgb(5, 61, 54));
             }
-            var bottom = new Panel { Name="dashboard-bottom",Location=new Point(38,345),Size=new Size(904,135),BackColor=Color.FromArgb(5, 31, 29) };
+            var bottom = new DashboardSectionPanel { Name="dashboard-bottom",Location=new Point(38,345),Size=new Size(904,135) };
             bottom.Controls.Add(new Label { Text="Atenção operacional",Location=new Point(20,18),AutoSize=true,Font=new Font("Segoe UI",16,FontStyle.Bold),ForeColor=Color.White });
             _dashAlerts.Location=new Point(22,54);_dashAlerts.Size=new Size(450,58);_dashAlerts.Font=new Font("Segoe UI",10);_dashAlerts.ForeColor=Color.FromArgb(205,239,230);bottom.Controls.Add(_dashAlerts);
             var hide = new Button { Text = "Ocultar valores", Location = new Point(500,50), Size = new Size(190,34), BackColor = Color.FromArgb(13, 169, 145), ForeColor = Color.FromArgb(3, 35, 31), FlatStyle = FlatStyle.Flat, TextImageRelation = TextImageRelation.ImageBeforeText, ImageAlign = ContentAlignment.MiddleLeft, TextAlign = ContentAlignment.MiddleCenter, Image = CreateDashboardEyeIcon(false) };
@@ -167,32 +167,61 @@ namespace RMCFlowComercioLocal
         private static void AddDashboardCard(TabPage page, string title, Label value, int x, int y, Color color, Color foreground)
         {
             var card = new DashboardCardPanel(color) { Location = new Point(x, y), Size = new Size(210, 92), Tag = title };
-            card.Controls.Add(new Label { Text = title, Location = new Point(14, 13), AutoSize = true, Font = new Font("Segoe UI", 10), ForeColor = foreground });
-            value.Location = new Point(14, 43); value.AutoSize = true; value.Font = new Font("Segoe UI", 17, FontStyle.Bold); value.ForeColor = foreground; card.Controls.Add(value); page.Controls.Add(card);
+            card.Controls.Add(new Label { Text = title, Location = new Point(14, 13), AutoSize = true, Font = new Font("Segoe UI", 10), ForeColor = foreground, BackColor = Color.Transparent });
+            value.Location = new Point(14, 43); value.AutoSize = true; value.Font = new Font("Segoe UI", 17, FontStyle.Bold); value.ForeColor = foreground; value.BackColor = Color.Transparent; card.Controls.Add(value); page.Controls.Add(card);
         }
 
         private static Bitmap CreateDashboardBackground()
         {
-            var bitmap = new Bitmap(1200, 760);
-            using (var graphics = Graphics.FromImage(bitmap))
-            using (var brush = new LinearGradientBrush(new Rectangle(0, 0, bitmap.Width, bitmap.Height), Color.FromArgb(0, 103, 86), Color.FromArgb(0, 91, 78), LinearGradientMode.Horizontal))
+            const int width = 600, height = 400;
+            var bitmap = new Bitmap(width, height);
+            var top = Color.FromArgb(5, 13, 12);
+            var middle = Color.FromArgb(7, 23, 20);
+            var bottom = Color.FromArgb(6, 60, 53);
+            var glowCenter = Color.FromArgb(0, 203, 178);
+            var glowMid = Color.FromArgb(0, 152, 138);
+            var glowEdge = Color.FromArgb(6, 61, 54);
+            for (var y = 0; y < height; y++)
             {
-                brush.InterpolationColors = new ColorBlend
+                var vertical = y / (double)(height - 1);
+                var baseColor = vertical < 0.42
+                    ? MixDashboardColor(top, middle, vertical / 0.42)
+                    : MixDashboardColor(middle, bottom, (vertical - 0.42) / 0.58);
+                for (var x = 0; x < width; x++)
                 {
-                    Colors = new[] { Color.FromArgb(0, 103, 86), Color.FromArgb(5, 27, 25), Color.FromArgb(0, 91, 78) },
-                    Positions = new[] { 0f, 0.52f, 1f }
-                };
-                graphics.FillRectangle(brush, 0, 0, bitmap.Width, bitmap.Height);
+                    var leftDistance = Math.Sqrt(Math.Pow(x / (width * 0.24), 2) + Math.Pow((y - height * 0.55) / (height * 0.78), 2));
+                    var rightDistance = Math.Sqrt(Math.Pow((width - 1 - x) / (width * 0.24), 2) + Math.Pow((y - height * 0.55) / (height * 0.78), 2));
+                    var color = ApplyDashboardGlow(baseColor, leftDistance, glowCenter, glowMid, glowEdge);
+                    color = ApplyDashboardGlow(color, rightDistance, glowCenter, glowMid, glowEdge);
+                    bitmap.SetPixel(x, y, color);
+                }
             }
             return bitmap;
         }
 
+        private static Color ApplyDashboardGlow(Color background, double distance, Color center, Color middle, Color edge)
+        {
+            if (distance <= 0.32) return MixDashboardColor(center, middle, distance / 0.32);
+            if (distance <= 0.65) return MixDashboardColor(middle, edge, (distance - 0.32) / 0.33);
+            if (distance < 1.0) return MixDashboardColor(background, edge, (1.0 - distance) / 0.35);
+            return background;
+        }
+
+        private static Color MixDashboardColor(Color first, Color second, double amount)
+        {
+            amount = Math.Max(0, Math.Min(1, amount));
+            return Color.FromArgb(
+                (int)Math.Round(first.R + (second.R - first.R) * amount),
+                (int)Math.Round(first.G + (second.G - first.G) * amount),
+                (int)Math.Round(first.B + (second.B - first.B) * amount));
+        }
+
         private void AddDashboardAccountCards(TabPage page)
         {
-            var license = new DashboardCardPanel(Color.FromArgb(9, 55, 49)) { Name = "dashboard-license", Location = new Point(38, 495), Size = new Size(446, 86) };
-            var licenseTitle = new Label { Text = "▸ Minha licença", Location = new Point(14, 10), AutoSize = true, Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.White, Cursor = Cursors.Hand };
-            var licenseSummary = new Label { Text = "RMC Flow Comércio Local • Licença permanente", Location = new Point(14, 34), AutoSize = true, Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(153, 232, 210), Cursor = Cursors.Hand };
-            var licenseDetails = new Panel { Location = new Point(14, 61), Size = new Size(418, 78), Visible = false };
+            var license = new DashboardCardPanel(Color.FromArgb(18, 65, 62)) { Name = "dashboard-license", Location = new Point(38, 495), Size = new Size(446, 86) };
+            var licenseTitle = new Label { Text = "▸ Minha licença", Location = new Point(14, 10), AutoSize = true, Font = new Font("Segoe UI", 11, FontStyle.Bold), BackColor = Color.Transparent, ForeColor = Color.White, Cursor = Cursors.Hand };
+            var licenseSummary = new Label { Text = "RMC Flow Comércio Local • Licença permanente", Location = new Point(14, 34), AutoSize = true, Font = new Font("Segoe UI", 9), BackColor = Color.Transparent, ForeColor = Color.FromArgb(153, 232, 210), Cursor = Cursors.Hand };
+            var licenseDetails = new Panel { Location = new Point(14, 61), Size = new Size(418, 78), BackColor = Color.FromArgb(18, 65, 62), Visible = false };
             licenseDetails.Controls.Add(new Label { Text = "Edição local • Licença permanente", Location = new Point(0, 0), AutoSize = true, ForeColor = Color.White });
             licenseDetails.Controls.Add(new Label { Text = "Ativação: " + (_database.IsActivated() ? "Ativa" : "Pendente"), Location = new Point(0, 21), AutoSize = true, ForeColor = Color.White });
             var upgrade = new Button { Text = "Fazer upgrade para a versão Cloud", Location = new Point(0, 43), Size = new Size(245, 30), BackColor = Color.FromArgb(13, 169, 145), ForeColor = Color.FromArgb(3, 35, 31), FlatStyle = FlatStyle.Flat };
@@ -202,10 +231,10 @@ namespace RMCFlowComercioLocal
             EventHandler toggleLicense = (s,e) => { licenseDetails.Visible = !licenseDetails.Visible; license.Height = licenseDetails.Visible ? 151 : 86; licenseTitle.Text = (licenseDetails.Visible ? "▾ " : "▸ ") + "Minha licença"; licenseView.Text = licenseDetails.Visible ? "Ocultar" : "Ver dados"; license.Invalidate(); LayoutDashboard(page); };
             licenseView.Click += toggleLicense; licenseTitle.Click += toggleLicense; licenseSummary.Click += toggleLicense; license.Controls.Add(licenseView); page.Controls.Add(license);
 
-            var support = new DashboardCardPanel(Color.FromArgb(9, 55, 49)) { Name = "dashboard-support", Location = new Point(496, 495), Size = new Size(446, 86) };
-            var supportTitle = new Label { Text = "▸ Precisa de suporte?", Location = new Point(14, 10), AutoSize = true, Font = new Font("Segoe UI", 11, FontStyle.Bold), ForeColor = Color.White, Cursor = Cursors.Hand };
-            var supportSummary = new Label { Text = "E-mail e WhatsApp da RMC Sites", Location = new Point(14, 34), AutoSize = true, Font = new Font("Segoe UI", 9), ForeColor = Color.FromArgb(153, 232, 210), Cursor = Cursors.Hand };
-            var supportDetails = new Panel { Location = new Point(14, 61), Size = new Size(418, 78), Visible = false };
+            var support = new DashboardCardPanel(Color.FromArgb(18, 65, 62)) { Name = "dashboard-support", Location = new Point(496, 495), Size = new Size(446, 86) };
+            var supportTitle = new Label { Text = "▸ Precisa de suporte?", Location = new Point(14, 10), AutoSize = true, Font = new Font("Segoe UI", 11, FontStyle.Bold), BackColor = Color.Transparent, ForeColor = Color.White, Cursor = Cursors.Hand };
+            var supportSummary = new Label { Text = "E-mail e WhatsApp da RMC Sites", Location = new Point(14, 34), AutoSize = true, Font = new Font("Segoe UI", 9), BackColor = Color.Transparent, ForeColor = Color.FromArgb(153, 232, 210), Cursor = Cursors.Hand };
+            var supportDetails = new Panel { Location = new Point(14, 61), Size = new Size(418, 78), BackColor = Color.FromArgb(18, 65, 62), Visible = false };
             supportDetails.Controls.Add(new Label { Text = "Fale com a equipe da RMC Sites se tiver dúvidas ou precisar de ajuda.", Location = new Point(0, 0), Size = new Size(405, 20), ForeColor = Color.White });
             var email = new LinkLabel { Text = "contato@rmcsites.com.br", Location = new Point(0, 27), AutoSize = true, LinkColor = Color.White, ActiveLinkColor = Color.FromArgb(13, 220, 170) };
             email.Click += (s,e) => System.Diagnostics.Process.Start("mailto:contato@rmcsites.com.br"); supportDetails.Controls.Add(email);
@@ -747,16 +776,53 @@ namespace RMCFlowComercioLocal
         private void DeleteSelected(object sender, EventArgs e) { if (_items.CurrentRow == null) { MessageBox.Show("Selecione um item."); return; } if (MessageBox.Show("Excluir o item selecionado?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes) { _database.DeleteWorkOrderItem(Convert.ToInt64(_items.CurrentRow.Cells["Código"].Value)); RefreshItems(); } }
     }
 
-    internal sealed class DashboardCardPanel : Panel
+    internal sealed class DashboardSectionPanel : Panel
     {
-        private readonly Color _start;
-        public DashboardCardPanel(Color start) { _start = start; DoubleBuffered = true; }
+        public DashboardSectionPanel() { DoubleBuffered = true; SetStyle(ControlStyles.SupportsTransparentBackColor, true); BackColor = Color.FromArgb(10, 23, 22); }
         protected override void OnPaintBackground(PaintEventArgs e)
         {
             if (ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
-            var end = Color.FromArgb(Math.Min(255, _start.R + 18), Math.Min(255, _start.G + 22), Math.Min(255, _start.B + 19));
-            using (var brush = new LinearGradientBrush(ClientRectangle, _start, end, LinearGradientMode.Vertical)) e.Graphics.FillRectangle(brush, ClientRectangle);
-            using (var pen = new Pen(Color.FromArgb(58, 164, 143))) e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+            using (var brush = new LinearGradientBrush(ClientRectangle, Color.FromArgb(10, 23, 22), Color.FromArgb(11, 32, 30), 135f))
+            {
+                brush.InterpolationColors = new ColorBlend
+                {
+                    Colors = new[] { Color.FromArgb(10, 23, 22), Color.FromArgb(10, 25, 24), Color.FromArgb(11, 32, 30) },
+                    Positions = new[] { 0f, 0.48f, 1f }
+                };
+                e.Graphics.FillRectangle(brush, ClientRectangle);
+            }
+        }
+    }
+
+    internal sealed class DashboardCardPanel : Panel
+    {
+        private readonly Color _start;
+        private readonly bool _light;
+        public DashboardCardPanel(Color start)
+        {
+            _start = start; _light = start.G >= 150;
+            DoubleBuffered = true; SetStyle(ControlStyles.SupportsTransparentBackColor, true); BackColor = start;
+        }
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            if (ClientSize.Width <= 0 || ClientSize.Height <= 0) return;
+            if (_light)
+            {
+                using (var brush = new LinearGradientBrush(ClientRectangle, Color.FromArgb(143, 226, 185), Color.FromArgb(163, 235, 197), LinearGradientMode.Vertical)) e.Graphics.FillRectangle(brush, ClientRectangle);
+            }
+            else
+            {
+                using (var brush = new LinearGradientBrush(ClientRectangle, Color.FromArgb(18, 65, 62), Color.FromArgb(11, 41, 42), 145f))
+                {
+                    brush.InterpolationColors = new ColorBlend
+                    {
+                        Colors = new[] { Color.FromArgb(18, 65, 62), Color.FromArgb(13, 51, 50), Color.FromArgb(11, 41, 42) },
+                        Positions = new[] { 0f, 0.52f, 1f }
+                    };
+                    e.Graphics.FillRectangle(brush, ClientRectangle);
+                }
+            }
+            using (var pen = new Pen(_light ? Color.FromArgb(45, 156, 124) : Color.FromArgb(26, 92, 85))) e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
         }
     }
 
