@@ -1714,10 +1714,12 @@ namespace RMCFlowComercioLocal
             var query = _search.Text.Trim();
             if (query.Length == 0) { _found.DataSource = null; return; }
             var found = _database.FindProducts(query);
+            _found.DroppedDown = false;
             _found.DataSource = found;
             _found.DisplayMember = "name";
             _found.ValueMember = "id";
             _found.SelectedIndex = -1;
+            if (found.Rows.Count > 0 && _search.Focused) _found.DroppedDown = true;
         }
         private void SearchAndAdd()
         {
