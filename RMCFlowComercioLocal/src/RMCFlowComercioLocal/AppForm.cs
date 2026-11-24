@@ -1693,9 +1693,9 @@ namespace RMCFlowComercioLocal
         public PdvForm(LocalDatabase database) { _database = database; Text = "PDV — Venda rápida"; StartPosition = FormStartPosition.CenterParent; Size = new Size(920, 700); MinimumSize = new Size(760, 570); Build(); }
         private void Build()
         {
-            Controls.Add(new Label { Text = "Produto, código ou código de barras", Location = new Point(20,18), AutoSize=true }); _search.Location = new Point(20,38); _search.Size = new Size(350,24); _search.KeyDown += SearchKey; Controls.Add(_search);
-            var find = new Button { Text="Buscar / adicionar", Location=new Point(380,36), Size=new Size(130,28) }; find.Click += (s,e) => SearchAndAdd(); Controls.Add(find);
-            _found.Location = new Point(20,72); _found.Size = new Size(490,24); _found.DisplayMember="display_name"; _found.ValueMember="id"; Controls.Add(_found);
+            Controls.Add(new Label { Text = "Produto, código ou código de barras", Location = new Point(20,18), AutoSize=true }); _search.Location = new Point(20,38); _search.Size = new Size(350,24); _search.KeyDown += SearchKey; _search.TextChanged += (s,e) => RefreshProductLookup(); Controls.Add(_search);
+            var find = new Button { Text="Buscar produtos", Location=new Point(380,36), Size=new Size(130,28) }; find.Click += (s,e) => SearchAndAdd(); Controls.Add(find);
+            _found.Location = new Point(20,72); _found.Size = new Size(490,24); _found.DropDownStyle = ComboBoxStyle.DropDownList; _found.DisplayMember="name"; _found.ValueMember="id"; Controls.Add(_found);
             var add = new Button { Text="Adicionar selecionado", Location=new Point(520,70), Size=new Size(145,28) }; add.Click += (s,e) => AddSelected(); Controls.Add(add);
             Controls.Add(new Label { Text = "Cliente (opcional)", Location = new Point(20, 108), AutoSize = true }); _client.Location = new Point(20, 128); _client.Size = new Size(390, 24); _client.DisplayMember = "name"; _client.ValueMember = "id"; Controls.Add(_client); LoadClients();
             var searchClient = new Button { Text = "Pesquisar cliente", Location = new Point(420, 126), Size = new Size(135, 28) }; searchClient.Click += (s, e) => SearchClient(); Controls.Add(searchClient);
@@ -1709,10 +1709,28 @@ namespace RMCFlowComercioLocal
             _total.Location=new Point(20,565); _total.AutoSize=true; _total.Font=new Font("Segoe UI",14,FontStyle.Bold); _total.ForeColor=Color.FromArgb(7,55,94); _total.Anchor=AnchorStyles.Bottom|AnchorStyles.Left; Controls.Add(_total); var finish=new Button { Text="Finalizar venda", Location=new Point(710,560), Size=new Size(160,36), Anchor=AnchorStyles.Bottom|AnchorStyles.Right, BackColor=Color.FromArgb(24,189,200), ForeColor=Color.White, FlatStyle=FlatStyle.Flat }; finish.Click += Finish; Controls.Add(finish); RefreshTotal(); _search.Focus();
         }
         private void SearchKey(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress=true; SearchAndAdd(); } }
+        private void RefreshProductLookup()
+        {
+            var query = _search.Text.Trim();
+            if (query.Length == 0) { _found.DataSource = null; return; }
+            var found = _database.FindProducts(query);
+            _found.DataSource = found;
+            _found.DisplayMember = "name";
+            _found.ValueMember = "id";
+            _found.SelectedIndex = -1;
+        }
         private void SearchAndAdd()
         {
-            var found = _database.FindProducts(_search.Text.Trim()); if (found.Rows.Count == 0) { MessageBox.Show("Produto não encontrado. Confira o código de barras ou cadastre o produto."); return; }
-            _found.DataSource=found; _found.DisplayMember="name"; _found.ValueMember="id"; if (found.Rows.Count == 1) AddSelected(); else _found.Focus();
+            var query = _search.Text.Trim();
+            if (query.Length == 0) { MessageBox.Show("Digite o nome, código ou código de barras do produto."); return; }
+            var found = _database.FindProducts(query);
+            if (found.Rows.Count == 0) { _found.DataSource = null; MessageBox.Show("Produto não encontrado. Confira o código de barras ou cadastre o produto."); return; }
+            _found.DataSource = found;
+            _found.DisplayMember = "name";
+            _found.ValueMember = "id";
+            _found.SelectedIndex = -1;
+            _found.Focus();
+            _found.DroppedDown = true;
         }
         private void AddSelected()
         {
