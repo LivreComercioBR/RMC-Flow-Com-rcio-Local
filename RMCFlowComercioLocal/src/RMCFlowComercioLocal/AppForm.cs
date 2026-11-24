@@ -1173,11 +1173,11 @@ namespace RMCFlowComercioLocal
             var header = new Panel { Dock = DockStyle.Fill };
             var title = new Label { Text = "Caixa", Font = new Font("Segoe UI", 16, FontStyle.Bold), AutoSize = true, Location = new Point(0, 0) };
             header.Controls.Add(title);
-            _status.AutoSize = true; _status.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _status.AutoSize = false; _status.Height = 20; _status.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             header.Controls.Add(_status);
             _openButton.Text = "Abrir caixa"; _openButton.Size = new Size(110, 30); _openButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _openButton.Click += (s, e) => Open(); header.Controls.Add(_openButton);
-            header.Resize += (s, e) => { _status.Location = new Point(Math.Max(180, header.ClientSize.Width - 300), 9); _openButton.Location = new Point(Math.Max(180, header.ClientSize.Width - 120), 4); };
+            header.Resize += (s, e) => { _status.Location = new Point(0, 31); _status.Width = Math.Max(180, header.ClientSize.Width - 130); _openButton.Location = new Point(Math.Max(180, header.ClientSize.Width - 120), 4); };
             root.Controls.Add(header, 0, 0);
 
             var summary = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 0, 0, 8) };
@@ -1261,7 +1261,7 @@ namespace RMCFlowComercioLocal
         {
             var open = _database.GetOpenCash();
             _cashId = open.Rows.Count == 0 ? (long?)null : Convert.ToInt64(open.Rows[0]["id"]);
-            _status.Text = _cashId.HasValue ? "Caixa aberto desde " + Convert.ToDateTime(open.Rows[0]["opened_at"]).ToLocalTime().ToString("dd/MM/yyyy HH:mm") + " • Operador: " + (open.Rows[0]["opened_by"] == DBNull.Value || string.IsNullOrWhiteSpace(Convert.ToString(open.Rows[0]["opened_by"])) ? "não registrado (caixa anterior à atualização)" : Convert.ToString(open.Rows[0]["opened_by"])) : "Caixa fechado";
+            _status.Text = _cashId.HasValue ? "Operador conectado: " + _user.Name + " • Abertura por: " + (open.Rows[0]["opened_by"] == DBNull.Value || string.IsNullOrWhiteSpace(Convert.ToString(open.Rows[0]["opened_by"])) ? "não registrado nesta abertura antiga" : Convert.ToString(open.Rows[0]["opened_by"])) + " • Desde " + Convert.ToDateTime(open.Rows[0]["opened_at"]).ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "Operador conectado: " + _user.Name + " • Caixa fechado";
             _openButton.Enabled = !_cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.open");
             _registerButton.Enabled = _cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.movement");
             _closeButton.Enabled = _cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.close");
