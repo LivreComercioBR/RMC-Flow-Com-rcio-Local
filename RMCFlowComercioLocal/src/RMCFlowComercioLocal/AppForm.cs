@@ -1170,17 +1170,31 @@ namespace RMCFlowComercioLocal
             headerPanel.Resize += (s,e) => total.Location = new Point(Math.Max(0, headerPanel.ClientSize.Width - total.Width), 12);
             root.Controls.Add(headerPanel, 0, 0);
 
-            var summary = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = Color.White, CellBorderStyle = TableLayoutPanelCellBorderStyle.Single };
-            summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58)); summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+            var summary = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
             var supplier = Convert.ToString(purchase["supplier_name"]);
             var supplierInfo = supplier;
             if (!string.IsNullOrWhiteSpace(Convert.ToString(purchase["supplier_document"]))) supplierInfo += " • " + Convert.ToString(purchase["supplier_document"]);
             if (!string.IsNullOrWhiteSpace(Convert.ToString(purchase["supplier_phone"]))) supplierInfo += " • " + Convert.ToString(purchase["supplier_phone"]);
             var invoice = Convert.ToString(purchase["invoice_number"]); if (string.IsNullOrWhiteSpace(invoice)) invoice = "Não informada";
-            summary.Controls.Add(SummaryLabel("Fornecedor: " + supplierInfo), 0, 0);
-            summary.Controls.Add(SummaryLabel("Compra: " + Convert.ToString(purchase["number"]) + " • NF/documento: " + invoice), 1, 0);
-            summary.Controls.Add(SummaryLabel("Data: " + DateText(purchase["purchased_at"]) + " • Forma: " + Convert.ToString(purchase["payment_method"])), 0, 1);
-            summary.Controls.Add(SummaryLabel("Status: " + Convert.ToString(purchase["status"]) + " • Conta a pagar: " + (Convert.ToInt32(purchase["payable_generated"]) == 1 ? "Sim" : "Não")), 1, 1);
+            var supplierLabel = SummaryLabel("Fornecedor: " + supplierInfo);
+            var purchaseLabel = SummaryLabel("Compra: " + Convert.ToString(purchase["number"]) + " • NF/documento: " + invoice);
+            var dateLabel = SummaryLabel("Data: " + DateText(purchase["purchased_at"]) + " • Forma: " + Convert.ToString(purchase["payment_method"]));
+            var statusLabel = SummaryLabel("Status: " + Convert.ToString(purchase["status"]) + " • Conta a pagar: " + (Convert.ToInt32(purchase["payable_generated"]) == 1 ? "Sim" : "Não"));
+            summary.Controls.Add(supplierLabel);
+            summary.Controls.Add(purchaseLabel);
+            summary.Controls.Add(dateLabel);
+            summary.Controls.Add(statusLabel);
+            summary.Resize += (sender, e) =>
+            {
+                int left = 10;
+                int split = Math.Max(260, (summary.ClientSize.Width - 20) * 58 / 100);
+                int right = split + 10;
+                int rightWidth = Math.Max(120, summary.ClientSize.Width - right - 10);
+                supplierLabel.SetBounds(left, 8, split - 10, 30);
+                purchaseLabel.SetBounds(right, 8, rightWidth, 30);
+                dateLabel.SetBounds(left, 52, split - 10, 30);
+                statusLabel.SetBounds(right, 52, rightWidth, 30);
+            };
             root.Controls.Add(summary, 0, 1);
 
             root.Controls.Add(new Label { Text = "Itens da compra", Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Bottom }, 0, 2);
@@ -1191,7 +1205,7 @@ namespace RMCFlowComercioLocal
 
         }
 
-        private static Label SummaryLabel(string text) { return new Label { Text = text, Dock = DockStyle.Fill, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8), AutoEllipsis = true }; }
+        private static Label SummaryLabel(string text) { return new Label { Text = text, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(4, 0, 4, 0), AutoEllipsis = true }; }
         private static string DateText(object value) { DateTime date; return DateTime.TryParse(Convert.ToString(value), out date) ? date.ToString("dd/MM/yyyy") : Convert.ToString(value); }
         private static void ConfigureGrid(DataGridView grid) { grid.Dock = DockStyle.Fill; grid.ReadOnly = true; grid.AllowUserToAddRows = false; grid.AllowUserToDeleteRows = false; grid.RowHeadersVisible = false; grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; grid.BackgroundColor = Color.White; }
     }
