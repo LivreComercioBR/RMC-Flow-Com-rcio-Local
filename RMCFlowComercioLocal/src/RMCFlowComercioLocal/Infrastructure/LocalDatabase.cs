@@ -101,14 +101,21 @@ due_date=COALESCE((SELECT date(sales.created_at,'+30 days') FROM sales WHERE sal
 WHERE origin='PDV' AND status='Pago' AND payment_method IN ('Boleto','Crediário')
 AND sale_id IN (SELECT id FROM sales WHERE payment_method IN ('Boleto','Crediário'))
 AND julianday(COALESCE(paid_at,'')) IS NOT NULL AND abs(julianday(paid_at)-julianday(created_at))*86400<120;", connection)) repairReceivables.ExecuteNonQuery();
+                using (var linkExistingDebtors = new SQLiteCommand(@"UPDATE debtors SET
+client_id=(SELECT clients.id FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document LIMIT 1),
+name=COALESCE((SELECT clients.name FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document LIMIT 1),name),
+phone=COALESCE((SELECT clients.phone FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document LIMIT 1),phone),
+email=COALESCE((SELECT clients.email FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document LIMIT 1),email),
+active=1
+WHERE client_id IS NULL AND COALESCE(document,'')<>'' AND EXISTS(SELECT 1 FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document);", connection)) linkExistingDebtors.ExecuteNonQuery();
                 using (var syncDebtors = new SQLiteCommand(@"INSERT INTO debtors (name,document,phone,email,active,client_id)
 SELECT DISTINCT clients.name, clients.document, clients.phone, clients.email, 1, clients.id
 FROM sales JOIN clients ON clients.id=sales.client_id
-WHERE sales.is_deferred=1 AND NOT EXISTS(SELECT 1 FROM debtors WHERE debtors.client_id=clients.id);", connection)) syncDebtors.ExecuteNonQuery();
+WHERE sales.is_deferred=1 AND NOT EXISTS(SELECT 1 FROM debtors WHERE debtors.client_id=clients.id OR (COALESCE(clients.document,'')<>'' AND debtors.document=clients.document));", connection)) syncDebtors.ExecuteNonQuery();
                 using (var syncReceivables = new SQLiteCommand(@"UPDATE financial_entries
-SET debtor_id=(SELECT debtors.id FROM sales JOIN debtors ON debtors.client_id=sales.client_id WHERE sales.id=financial_entries.sale_id)
+SET debtor_id=(SELECT debtors.id FROM sales JOIN clients ON clients.id=sales.client_id JOIN debtors ON debtors.client_id=clients.id OR (debtors.client_id IS NULL AND COALESCE(clients.document,'')<>'' AND debtors.document=clients.document) WHERE sales.id=financial_entries.sale_id LIMIT 1)
 WHERE financial_entries.origin='PDV' AND financial_entries.debtor_id IS NULL
-AND EXISTS(SELECT 1 FROM sales JOIN debtors ON debtors.client_id=sales.client_id WHERE sales.id=financial_entries.sale_id);", connection)) syncReceivables.ExecuteNonQuery();
+AND EXISTS(SELECT 1 FROM sales JOIN clients ON clients.id=sales.client_id JOIN debtors ON debtors.client_id=clients.id OR (debtors.client_id IS NULL AND COALESCE(clients.document,'')<>'' AND debtors.document=clients.document) WHERE sales.id=financial_entries.sale_id);", connection)) syncReceivables.ExecuteNonQuery();
                 EnsureColumn(connection, "purchases", "status", "TEXT NOT NULL DEFAULT 'Finalizada'");
                 EnsureColumn(connection, "purchases", "cancellation_reason", "TEXT");
                 EnsureColumn(connection, "purchases", "cancelled_at", "TEXT");
