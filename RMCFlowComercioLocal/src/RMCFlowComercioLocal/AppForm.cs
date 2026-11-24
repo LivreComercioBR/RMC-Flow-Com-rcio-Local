@@ -1113,27 +1113,198 @@ namespace RMCFlowComercioLocal
 
     internal sealed class CashForm : Form
     {
-        private readonly LocalDatabase _database; private readonly SystemUser _user; private readonly DataGridView _grid=new DataGridView(); private readonly Label _status=new Label(); private long? _cashId;
-        public CashForm(LocalDatabase database,SystemUser user) { _database=database; _user=user; Text="Caixa"; StartPosition=FormStartPosition.CenterParent; Size=new Size(820,560); Build(); RefreshCash(); }
-        private void Build() { var open=new Button{Text="Abrir caixa",Location=new Point(18,16),Size=new Size(110,30),Enabled=_database.HasPermission(_user.Id,_user.Role,"cash.open")};open.Click+=(s,e)=>Open();Controls.Add(open); var supply=new Button{Text="Suprimento",Location=new Point(140,16),Size=new Size(110,30),Enabled=_database.HasPermission(_user.Id,_user.Role,"cash.movement")};supply.Click+=(s,e)=>Move("Suprimento");Controls.Add(supply);var withdrawal=new Button{Text="Sangria",Location=new Point(262,16),Size=new Size(110,30),Enabled=_database.HasPermission(_user.Id,_user.Role,"cash.movement")};withdrawal.Click+=(s,e)=>Move("Sangria");Controls.Add(withdrawal);var close=new Button{Text="Fechar caixa",Location=new Point(384,16),Size=new Size(110,30),Enabled=_database.HasPermission(_user.Id,_user.Role,"cash.close")};close.Click+=(s,e)=>CloseCash();Controls.Add(close);_status.Location=new Point(18,58);_status.AutoSize=true;_status.Font=new Font("Segoe UI",11,FontStyle.Bold);Controls.Add(_status);_grid.Location=new Point(18,88);_grid.Size=new Size(760,400);_grid.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;_grid.ReadOnly=true;_grid.AllowUserToAddRows=false;_grid.SelectionMode=DataGridViewSelectionMode.FullRowSelect;_grid.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill;_grid.BackgroundColor=Color.White;Controls.Add(_grid); }
-        private void RefreshCash() { var open=_database.GetOpenCash(); if(open.Rows.Count==0){_cashId=null;_status.Text="Caixa fechado";_grid.DataSource=null;return;} _cashId=Convert.ToInt64(open.Rows[0]["id"]);var initial=Convert.ToDecimal(open.Rows[0]["opening_balance"]);_status.Text="Caixa aberto • Saldo inicial: "+initial.ToString("C2")+" • Dinheiro esperado: "+_database.GetCashExpected(_cashId.Value).ToString("C2");_grid.DataSource=_database.GetCashMovements(_cashId.Value);}
-        private void Open(){if(_cashId.HasValue){MessageBox.Show("Já existe um caixa aberto.");return;} using(var f=new CashValueForm("Abrir caixa","Saldo inicial (R$)")){if(f.ShowDialog(this)==DialogResult.OK){_database.OpenCash(f.Value);RefreshCash();}}}
-        private void Move(string type){if(!_cashId.HasValue){MessageBox.Show("Abra o caixa primeiro.");return;}using(var f=new CashValueForm(type,type+" (R$)",true)){if(f.ShowDialog(this)==DialogResult.OK){_database.AddCashMovement(_cashId.Value,type,"Dinheiro",type=="Sangria"?-f.Value:f.Value,f.Description);RefreshCash();}}}
-        private void CloseCash(){if(!_cashId.HasValue){MessageBox.Show("Não há caixa aberto.");return;}using(var f=new CashValueForm("Fechar caixa","Valor contado em dinheiro (R$)")){if(f.ShowDialog(this)==DialogResult.OK){var expected=_database.GetCashExpected(_cashId.Value);_database.CloseCash(_cashId.Value,f.Value);MessageBox.Show("Caixa fechado. Esperado: "+expected.ToString("C2")+" | Diferença: "+(f.Value-expected).ToString("C2"));RefreshCash();}}}
+        private readonly LocalDatabase _database;
+        private readonly SystemUser _user;
+        private readonly Label _status = new Label();
+        private readonly Label[] _metrics = new Label[4];
+        private readonly DataGridView _movements = new DataGridView();
+        private readonly DataGridView _history = new DataGridView();
+        private readonly ComboBox _movementType = new ComboBox();
+        private readonly ComboBox _payment = new ComboBox();
+        private readonly ComboBox _category = new ComboBox();
+        private readonly NumericUpDown _amount = new NumericUpDown();
+        private readonly TextBox _description = new TextBox();
+        private readonly NumericUpDown _counted = new NumericUpDown();
+        private readonly TextBox _closingNotes = new TextBox();
+        private readonly Button _openButton = new Button();
+        private readonly Button _registerButton = new Button();
+        private readonly Button _closeButton = new Button();
+        private long? _cashId;
+
+        public CashForm(LocalDatabase database, SystemUser user)
+        {
+            _database = database; _user = user;
+            Text = "Caixa"; StartPosition = FormStartPosition.CenterParent;
+            Size = new Size(1040, 790); MinimumSize = new Size(820, 650);
+            Build(); RefreshCash();
+        }
+
+        private void Build()
+        {
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 5, AutoScroll = true };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 270));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 170));
+            Controls.Add(root);
+
+            var header = new Panel { Dock = DockStyle.Fill };
+            var title = new Label { Text = "Caixa", Font = new Font("Segoe UI", 16, FontStyle.Bold), AutoSize = true, Location = new Point(0, 0) };
+            header.Controls.Add(title);
+            _status.AutoSize = true; _status.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            header.Controls.Add(_status);
+            _openButton.Text = "Abrir caixa"; _openButton.Size = new Size(110, 30); _openButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _openButton.Click += (s, e) => Open(); header.Controls.Add(_openButton);
+            header.Resize += (s, e) => { _status.Location = new Point(Math.Max(180, header.ClientSize.Width - 300), 9); _openButton.Location = new Point(Math.Max(180, header.ClientSize.Width - 120), 4); };
+            root.Controls.Add(header, 0, 0);
+
+            var summary = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 0, 0, 8) };
+            for (var i = 0; i < 4; i++) { summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25)); summary.Controls.Add(MetricCard(i), i, 0); }
+            root.Controls.Add(summary, 0, 1);
+
+            var forms = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Padding = new Padding(0, 4, 0, 8) };
+            forms.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64)); forms.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36));
+            forms.Controls.Add(BuildMovementPanel(), 0, 0); forms.Controls.Add(BuildClosePanel(), 1, 0);
+            root.Controls.Add(forms, 0, 2);
+
+            var movementPanel = SectionPanel("Movimentos do caixa atual", _movements);
+            root.Controls.Add(movementPanel, 0, 3);
+            var historyPanel = SectionPanel("Últimos caixas", _history);
+            root.Controls.Add(historyPanel, 0, 4);
+        }
+
+        private Control MetricCard(int index)
+        {
+            var panel = new Panel { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 8, 0), Padding = new Padding(12), BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle };
+            var labels = new[] { "Saldo inicial", "Entradas", "Saídas", "Dinheiro esperado" };
+            panel.Controls.Add(new Label { Text = labels[index], AutoSize = true, ForeColor = Color.DimGray, Location = new Point(10, 10) });
+            _metrics[index] = new Label { Text = "R$ 0,00", AutoSize = true, Font = new Font("Segoe UI", 11, FontStyle.Bold), Location = new Point(10, 34) };
+            panel.Controls.Add(_metrics[index]);
+            return panel;
+        }
+
+        private Control BuildMovementPanel()
+        {
+            var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(12) };
+            panel.Controls.Add(new Label { Text = "Movimento manual", Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Location = new Point(12, 10) });
+            var labels = new[] { "Tipo", "Forma", "Categoria", "Valor", "Descrição" };
+            var controls = new Control[] { _movementType, _payment, _category, _amount, _description };
+            var y = 42;
+            for (var i = 0; i < controls.Length; i++)
+            {
+                panel.Controls.Add(new Label { Text = labels[i], AutoSize = true, Location = new Point(12, y) });
+                var control = controls[i]; control.Location = new Point(12, y + 18); control.Size = new Size(500, i == 4 ? 25 : 26); control.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                if (control is ComboBox) ((ComboBox)control).DropDownStyle = ComboBoxStyle.DropDownList;
+                panel.Controls.Add(control); y += i == 4 ? 48 : 44;
+            }
+            _movementType.Items.AddRange(new object[] { "Suprimento", "Sangria", "Despesa", "Recebimento" }); _movementType.SelectedIndex = 0;
+            _payment.Items.AddRange(new object[] { "Dinheiro", "PIX", "Débito", "Crédito", "Transferência", "Boleto", "Crediário", "Outros" }); _payment.SelectedIndex = 0;
+            var categories = _database.GetFinancialCategoryLookup();
+            _category.DataSource = categories; _category.DisplayMember = "display_name"; _category.ValueMember = "name";
+            if (categories.Rows.Count == 0) { _category.Items.Add("Sem categoria"); _category.SelectedIndex = 0; }
+            _amount.DecimalPlaces = 2; _amount.Maximum = 100000000; _amount.Minimum = 0;
+            _description.MaxLength = 250;
+            _registerButton.Text = "Registrar"; _registerButton.Size = new Size(110, 30); _registerButton.Location = new Point(12, y); _registerButton.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            _registerButton.Enabled = _database.HasPermission(_user.Id, _user.Role, "cash.movement"); _registerButton.Click += (s, e) => RegisterMovement();
+            panel.Controls.Add(_registerButton);
+            panel.Resize += (s, e) => { foreach (Control control in controls) control.Width = Math.Max(200, panel.ClientSize.Width - 28); };
+            return panel;
+        }
+
+        private Control BuildClosePanel()
+        {
+            var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(12) };
+            panel.Controls.Add(new Label { Text = "Fechar caixa", Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Location = new Point(12, 10) });
+            panel.Controls.Add(new Label { Text = "Informe somente o dinheiro físico contado.", AutoSize = true, ForeColor = Color.DimGray, Location = new Point(12, 40) });
+            panel.Controls.Add(new Label { Text = "Dinheiro contado", AutoSize = true, Location = new Point(12, 76) });
+            _counted.DecimalPlaces = 2; _counted.Maximum = 100000000; _counted.Location = new Point(12, 96); _counted.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; panel.Controls.Add(_counted);
+            panel.Controls.Add(new Label { Text = "Observações", AutoSize = true, Location = new Point(12, 132) });
+            _closingNotes.Multiline = true; _closingNotes.ScrollBars = ScrollBars.Vertical; _closingNotes.Location = new Point(12, 152); _closingNotes.Size = new Size(220, 54); _closingNotes.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right; panel.Controls.Add(_closingNotes);
+            _closeButton.Text = "Fechar caixa"; _closeButton.BackColor = Color.Firebrick; _closeButton.ForeColor = Color.White; _closeButton.FlatStyle = FlatStyle.Flat; _closeButton.Location = new Point(12, 214); _closeButton.Size = new Size(120, 30); _closeButton.Anchor = AnchorStyles.Top | AnchorStyles.Left; _closeButton.Enabled = _database.HasPermission(_user.Id, _user.Role, "cash.close"); _closeButton.Click += (s, e) => CloseCash(); panel.Controls.Add(_closeButton);
+            panel.Resize += (s, e) => { _counted.Width = Math.Max(160, panel.ClientSize.Width - 28); _closingNotes.Width = Math.Max(160, panel.ClientSize.Width - 28); };
+            return panel;
+        }
+
+        private Control SectionPanel(string title, DataGridView grid)
+        {
+            var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(12) };
+            panel.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Location = new Point(12, 10) });
+            grid.Location = new Point(12, 42); grid.Size = new Size(900, 90); grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            grid.ReadOnly = true; grid.AllowUserToAddRows = false; grid.AllowUserToDeleteRows = false; grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; grid.BackgroundColor = Color.White; grid.RowHeadersVisible = false;
+            panel.Controls.Add(grid); return panel;
+        }
+
+        private void RefreshCash()
+        {
+            var open = _database.GetOpenCash();
+            _cashId = open.Rows.Count == 0 ? (long?)null : Convert.ToInt64(open.Rows[0]["id"]);
+            _status.Text = _cashId.HasValue ? "Caixa aberto desde " + Convert.ToDateTime(open.Rows[0]["opened_at"]).ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "Caixa fechado";
+            _openButton.Enabled = !_cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.open");
+            _registerButton.Enabled = _cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.movement");
+            _closeButton.Enabled = _cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.close");
+            if (_cashId.HasValue)
+            {
+                var summary = _database.GetCashSummary(_cashId.Value).Rows[0];
+                _metrics[0].Text = Convert.ToDecimal(summary["opening_balance"]).ToString("C2");
+                _metrics[1].Text = Convert.ToDecimal(summary["entries"]).ToString("C2");
+                _metrics[2].Text = Convert.ToDecimal(summary["exits"]).ToString("C2");
+                _metrics[3].Text = Convert.ToDecimal(summary["expected"]).ToString("C2");
+                _movements.DataSource = _database.GetCashMovements(_cashId.Value);
+            }
+            else
+            {
+                foreach (var metric in _metrics) metric.Text = "R$ 0,00";
+                _movements.DataSource = null;
+            }
+            _history.DataSource = _database.GetCashHistory();
+        }
+
+        private void Open()
+        {
+            if (_cashId.HasValue) return;
+            using (var form = new CashValueForm("Abrir caixa", "Saldo inicial (R$)"))
+                if (form.ShowDialog(this) == DialogResult.OK) { _database.OpenCash(form.Value, _user.Name); RefreshCash(); }
+        }
+
+        private void RegisterMovement()
+        {
+            if (!_cashId.HasValue) { MessageBox.Show("Abra o caixa antes de registrar movimentos."); return; }
+            if (_amount.Value <= 0) { MessageBox.Show("Informe um valor maior que zero."); return; }
+            if (string.IsNullOrWhiteSpace(_description.Text)) { MessageBox.Show("Informe a descrição do movimento."); return; }
+            var type = Convert.ToString(_movementType.SelectedItem);
+            var amount = (type == "Sangria" || type == "Despesa") ? -_amount.Value : _amount.Value;
+            var category = _category.SelectedValue == null ? "" : Convert.ToString(_category.SelectedValue);
+            _database.AddCashMovement(_cashId.Value, type, Convert.ToString(_payment.SelectedItem), amount, _description.Text.Trim(), category);
+            _amount.Value = 0; _description.Clear(); RefreshCash();
+        }
+
+        private void CloseCash()
+        {
+            if (!_cashId.HasValue) return;
+            var expected = _database.GetCashExpected(_cashId.Value);
+            var difference = _counted.Value - expected;
+            var answer = MessageBox.Show("Dinheiro esperado: " + expected.ToString("C2") + "\nDinheiro contado: " + _counted.Value.ToString("C2") + "\nDiferença: " + difference.ToString("C2") + "\n\nConfirma o fechamento?", "Fechar caixa", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (answer != DialogResult.Yes) return;
+            _database.CloseCash(_cashId.Value, _counted.Value, _closingNotes.Text.Trim());
+            MessageBox.Show("Caixa fechado. Diferença: " + difference.ToString("C2"), "Caixa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _counted.Value = 0; _closingNotes.Clear(); RefreshCash();
+        }
     }
+
     internal sealed class CashValueForm : Form
     {
-        public decimal Value { get { return _value.Value; } } public string Description { get { return _description.Text.Trim(); } }
-        private readonly NumericUpDown _value = new NumericUpDown(); private readonly TextBox _description = new TextBox(); private readonly bool _requireDescription;
-        public CashValueForm(string title, string label) : this(title, label, false) { }
-        public CashValueForm(string title, string label, bool requireDescription)
+        public decimal Value { get { return _value.Value; } }
+        private readonly NumericUpDown _value = new NumericUpDown();
+        public CashValueForm(string title, string label)
         {
-            _requireDescription = requireDescription; Text = title; StartPosition = FormStartPosition.CenterParent; Size = new Size(420, requireDescription ? 255 : 190);
-            Controls.Add(new Label { Text = label, Location = new Point(22, 22), AutoSize = true }); _value.DecimalPlaces = 2; _value.Maximum = 1000000; _value.Location = new Point(22, 48); _value.Size = new Size(360, 24); Controls.Add(_value);
-            if (requireDescription) { Controls.Add(new Label { Text = "Descrição / motivo *", Location = new Point(22, 88), AutoSize = true }); _description.Location = new Point(22, 110); _description.Size = new Size(360, 24); Controls.Add(_description); }
-            var ok = new Button { Text = "Confirmar", Location = new Point(260, requireDescription ? 165 : 95), Size = new Size(122, 32) }; ok.Click += Confirm; Controls.Add(ok);
+            Text = title; StartPosition = FormStartPosition.CenterParent; Size = new Size(420, 170);
+            Controls.Add(new Label { Text = label, Location = new Point(22, 22), AutoSize = true });
+            _value.DecimalPlaces = 2; _value.Maximum = 100000000; _value.Location = new Point(22, 48); _value.Size = new Size(360, 24); Controls.Add(_value);
+            var ok = new Button { Text = "Confirmar", Location = new Point(260, 95), Size = new Size(122, 32) }; ok.Click += (s, e) => { DialogResult = DialogResult.OK; }; Controls.Add(ok);
         }
-        private void Confirm(object sender, EventArgs e) { if (_requireDescription && string.IsNullOrWhiteSpace(_description.Text)) { MessageBox.Show("Informe a descrição ou o motivo do lançamento."); return; } DialogResult = DialogResult.OK; }
     }
 
     internal sealed class FinancialFlowForm : Form
