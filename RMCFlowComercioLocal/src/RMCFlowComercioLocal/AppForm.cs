@@ -1211,13 +1211,13 @@ namespace RMCFlowComercioLocal
             panel.Controls.Add(new Label { Text = "Movimento manual", Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Location = new Point(12, 10) });
             var labels = new[] { "Tipo", "Forma", "Categoria", "Valor", "Descrição" };
             var controls = new Control[] { _movementType, _payment, _category, _amount, _description };
-            var y = 42;
+            var y = 38;
             for (var i = 0; i < controls.Length; i++)
             {
                 panel.Controls.Add(new Label { Text = labels[i], AutoSize = true, Location = new Point(12, y) });
-                var control = controls[i]; control.Location = new Point(12, y + 18); control.Size = new Size(500, i == 4 ? 25 : 26); control.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                var control = controls[i]; control.Location = new Point(12, y + 17); control.Size = new Size(500, 22); control.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
                 if (control is ComboBox) ((ComboBox)control).DropDownStyle = ComboBoxStyle.DropDownList;
-                panel.Controls.Add(control); y += i == 4 ? 48 : 44;
+                panel.Controls.Add(control); y += 40;
             }
             _movementType.Items.AddRange(new object[] { "Suprimento", "Sangria", "Despesa", "Recebimento" }); _movementType.SelectedIndex = 0;
             _payment.Items.AddRange(new object[] { "Dinheiro", "PIX", "Débito", "Crédito", "Transferência", "Boleto", "Crediário", "Outros" }); _payment.SelectedIndex = 0;
@@ -1226,7 +1226,7 @@ namespace RMCFlowComercioLocal
             else { _category.DataSource = categories; _category.DisplayMember = "display_name"; _category.ValueMember = "name"; }
             _amount.DecimalPlaces = 2; _amount.Maximum = 100000000; _amount.Minimum = 0;
             _description.MaxLength = 250;
-            _registerButton.Text = "Registrar"; _registerButton.Size = new Size(110, 30); _registerButton.Location = new Point(12, y); _registerButton.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            _registerButton.Text = "Salvar transação"; _registerButton.Size = new Size(145, 30); _registerButton.Location = new Point(12, y); _registerButton.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             _registerButton.Enabled = _database.HasPermission(_user.Id, _user.Role, "cash.movement"); _registerButton.Click += (s, e) => RegisterMovement();
             panel.Controls.Add(_registerButton);
             panel.Resize += (s, e) => { foreach (Control control in controls) control.Width = Math.Max(200, panel.ClientSize.Width - 28); };
