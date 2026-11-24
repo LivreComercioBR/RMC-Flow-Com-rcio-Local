@@ -1689,19 +1689,19 @@ namespace RMCFlowComercioLocal
 
     internal sealed class PdvForm : Form
     {
-        private readonly LocalDatabase _database; private readonly TextBox _search = new TextBox(); private readonly ComboBox _found = new ComboBox(); private readonly ComboBox _client = new ComboBox(); private readonly DataGridView _cart = new DataGridView(); private readonly ComboBox _payment = new ComboBox(); private readonly NumericUpDown _discount = new NumericUpDown(); private readonly Label _total = new Label(); private readonly DataTable _items = new DataTable();
+        private readonly LocalDatabase _database; private readonly TextBox _search = new TextBox(); private readonly ListBox _found = new ListBox(); private readonly ComboBox _client = new ComboBox(); private readonly DataGridView _cart = new DataGridView(); private readonly ComboBox _payment = new ComboBox(); private readonly NumericUpDown _discount = new NumericUpDown(); private readonly Label _total = new Label(); private readonly DataTable _items = new DataTable();
         public PdvForm(LocalDatabase database) { _database = database; Text = "PDV — Venda rápida"; StartPosition = FormStartPosition.CenterParent; Size = new Size(920, 700); MinimumSize = new Size(760, 570); Build(); }
         private void Build()
         {
             Controls.Add(new Label { Text = "Produto, código ou código de barras", Location = new Point(20,18), AutoSize=true }); _search.Location = new Point(20,38); _search.Size = new Size(350,24); _search.KeyDown += SearchKey; _search.TextChanged += (s,e) => RefreshProductLookup(); Controls.Add(_search);
             var find = new Button { Text="Buscar produtos", Location=new Point(380,36), Size=new Size(130,28) }; find.Click += (s,e) => SearchAndAdd(); Controls.Add(find);
-            _found.Location = new Point(20,72); _found.Size = new Size(490,24); _found.DropDownStyle = ComboBoxStyle.DropDownList; _found.DisplayMember="name"; _found.ValueMember="id"; Controls.Add(_found);
-            var add = new Button { Text="Adicionar selecionado", Location=new Point(520,70), Size=new Size(145,28) }; add.Click += (s,e) => AddSelected(); Controls.Add(add);
-            Controls.Add(new Label { Text = "Cliente (opcional)", Location = new Point(20, 108), AutoSize = true }); _client.Location = new Point(20, 128); _client.Size = new Size(390, 24); _client.DisplayMember = "name"; _client.ValueMember = "id"; Controls.Add(_client); LoadClients();
-            var searchClient = new Button { Text = "Pesquisar cliente", Location = new Point(420, 126), Size = new Size(135, 28) }; searchClient.Click += (s, e) => SearchClient(); Controls.Add(searchClient);
-            var newClient = new Button { Text = "Novo cliente", Location = new Point(565, 126), Size = new Size(120, 28) }; newClient.Click += (s, e) => NewClient(); Controls.Add(newClient);
+            _found.Location = new Point(20,72); _found.Size = new Size(490,72); _found.IntegralHeight = false; _found.SelectionMode = SelectionMode.One; _found.DisplayMember="name"; _found.ValueMember="id"; _found.BorderStyle = BorderStyle.FixedSingle; Controls.Add(_found);
+            var add = new Button { Text="Adicionar selecionado", Location=new Point(520,72), Size=new Size(145,28) }; add.Click += (s,e) => AddSelected(); Controls.Add(add);
+            Controls.Add(new Label { Text = "Cliente (opcional)", Location = new Point(20, 152), AutoSize = true }); _client.Location = new Point(20, 172); _client.Size = new Size(390, 24); _client.DisplayMember = "name"; _client.ValueMember = "id"; Controls.Add(_client); LoadClients();
+            var searchClient = new Button { Text = "Pesquisar cliente", Location = new Point(420, 170), Size = new Size(135, 28) }; searchClient.Click += (s, e) => SearchClient(); Controls.Add(searchClient);
+            var newClient = new Button { Text = "Novo cliente", Location = new Point(565, 170), Size = new Size(120, 28) }; newClient.Click += (s, e) => NewClient(); Controls.Add(newClient);
             _items.Columns.Add("product_id", typeof(long)); _items.Columns.Add("Descrição", typeof(string)); _items.Columns.Add("Qtd.", typeof(decimal)); _items.Columns.Add("Valor unitário", typeof(decimal)); _items.Columns.Add("Total", typeof(decimal)); _items.Columns.Add("quantity", typeof(decimal)); _items.Columns.Add("unit_price", typeof(decimal)); _items.Columns.Add("description", typeof(string));
-            _cart.Location=new Point(20,166); _cart.Size=new Size(850,330); _cart.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right; _cart.ReadOnly=true; _cart.AllowUserToAddRows=false; _cart.AllowUserToDeleteRows=false; _cart.SelectionMode=DataGridViewSelectionMode.FullRowSelect; _cart.MultiSelect=false; _cart.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill; _cart.BackgroundColor=Color.White; Controls.Add(_cart); _cart.DataSource=_items;
+            _cart.Location=new Point(20,210); _cart.Size=new Size(850,286); _cart.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right; _cart.ReadOnly=true; _cart.AllowUserToAddRows=false; _cart.AllowUserToDeleteRows=false; _cart.SelectionMode=DataGridViewSelectionMode.FullRowSelect; _cart.MultiSelect=false; _cart.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill; _cart.BackgroundColor=Color.White; Controls.Add(_cart); _cart.DataSource=_items;
             foreach (string hidden in new []{"product_id","quantity","unit_price","description"}) if (_cart.Columns.Contains(hidden)) _cart.Columns[hidden].Visible=false;
             var remove = new Button { Text="Remover item", Location=new Point(20,510), Size=new Size(115,30), Anchor=AnchorStyles.Bottom|AnchorStyles.Left }; remove.Click += (s,e) => { if (_cart.CurrentRow != null) { _items.Rows.RemoveAt(_cart.CurrentRow.Index); RefreshTotal(); } }; Controls.Add(remove);
             Controls.Add(new Label { Text="Pagamento", Location=new Point(440,510), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _payment.Items.AddRange(new object[]{"Dinheiro","PIX","Débito","Crédito","Transferência","Boleto","Crediário","Outros"}); _payment.Text="PIX"; _payment.Location=new Point(440,530); _payment.Size=new Size(150,24); _payment.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; Controls.Add(_payment);
@@ -1714,25 +1714,17 @@ namespace RMCFlowComercioLocal
             var query = _search.Text.Trim();
             if (query.Length == 0) { _found.DataSource = null; return; }
             var found = _database.FindProducts(query);
-            _found.DroppedDown = false;
             _found.DataSource = found;
             _found.DisplayMember = "name";
             _found.ValueMember = "id";
             _found.SelectedIndex = -1;
-            if (found.Rows.Count > 0 && _search.Focused) _found.DroppedDown = true;
         }
         private void SearchAndAdd()
         {
             var query = _search.Text.Trim();
             if (query.Length == 0) { MessageBox.Show("Digite o nome, código ou código de barras do produto."); return; }
-            var found = _database.FindProducts(query);
-            if (found.Rows.Count == 0) { _found.DataSource = null; MessageBox.Show("Produto não encontrado. Confira o código de barras ou cadastre o produto."); return; }
-            _found.DataSource = found;
-            _found.DisplayMember = "name";
-            _found.ValueMember = "id";
-            _found.SelectedIndex = -1;
-            _found.Focus();
-            _found.DroppedDown = true;
+            RefreshProductLookup();
+            if (_found.Items.Count == 0) MessageBox.Show("Produto não encontrado. Confira o código de barras ou cadastre o produto.");
         }
         private void AddSelected()
         {
