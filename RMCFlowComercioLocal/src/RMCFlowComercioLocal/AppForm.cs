@@ -1694,7 +1694,7 @@ namespace RMCFlowComercioLocal
         private void Build()
         {
             Controls.Add(new Label { Text = "Produto, código ou código de barras", Location = new Point(20,18), AutoSize=true }); _search.Location = new Point(20,38); _search.Size = new Size(350,24); _search.KeyDown += SearchKey; _search.TextChanged += (s,e) => RefreshProductLookup(); Controls.Add(_search);
-            var find = new Button { Text="Buscar / adicionar", Location=new Point(380,36), Size=new Size(130,28) }; find.Click += (s,e) => SearchAndAdd(); Controls.Add(find);
+            var find = new Button { Text="Buscar produtos", Location=new Point(380,36), Size=new Size(130,28) }; find.Click += (s,e) => SearchAndAdd(); Controls.Add(find);
             _found.Location = new Point(20,72); _found.Size = new Size(490,24); _found.DropDownStyle = ComboBoxStyle.DropDownList; _found.DisplayMember="name"; _found.ValueMember="id"; Controls.Add(_found);
             var add = new Button { Text="Adicionar selecionado", Location=new Point(520,70), Size=new Size(145,28) }; add.Click += (s,e) => AddSelected(); Controls.Add(add);
             Controls.Add(new Label { Text = "Cliente (opcional)", Location = new Point(20, 108), AutoSize = true }); _client.Location = new Point(20, 128); _client.Size = new Size(390, 24); _client.DisplayMember = "name"; _client.ValueMember = "id"; Controls.Add(_client); LoadClients();
