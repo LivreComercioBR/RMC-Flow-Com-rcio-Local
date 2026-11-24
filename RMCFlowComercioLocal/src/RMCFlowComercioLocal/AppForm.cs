@@ -1903,7 +1903,7 @@ namespace RMCFlowComercioLocal
                 if (schedule.Rows.Count == 0) return;
                 if (method == "Crédito")
                 {
-                    deferred = schedule.Rows.Count > 1;
+                    deferred = schedule.Rows.Count > 1 || !Convert.ToBoolean(schedule.Rows[0]["is_paid"]);
                     if (deferred && !clientId.HasValue)
                     {
                         MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas do cartão.");
