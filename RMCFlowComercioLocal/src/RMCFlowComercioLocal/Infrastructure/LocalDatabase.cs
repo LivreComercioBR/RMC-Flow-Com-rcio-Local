@@ -1090,7 +1090,7 @@ ORDER BY 9, 2, 3;");
         {
             var schedule = new DataTable();
             schedule.Columns.Add("due_date", typeof(string)); schedule.Columns.Add("amount", typeof(decimal)); schedule.Columns.Add("is_paid", typeof(bool)); schedule.Columns.Add("payment_method", typeof(string));
-            decimal total = Math.Max(0, items.Rows.Cast<DataRow>().Sum(item => Convert.ToDecimal(item["quantity"]) * Convert.ToDecimal(item["unit_price"])) - discount);
+            decimal subtotal = 0; foreach (DataRow item in items.Rows) subtotal += Convert.ToDecimal(item["quantity"]) * Convert.ToDecimal(item["unit_price"]); decimal total = Math.Max(0, subtotal - discount);
             schedule.Rows.Add(DateTime.Now.ToString("yyyy-MM-dd"), total, true, paymentMethod);
             SaveSale(number, items, paymentMethod, discount, clientId, schedule, false);
         }
