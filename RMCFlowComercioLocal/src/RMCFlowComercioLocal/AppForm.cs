@@ -49,6 +49,7 @@ namespace RMCFlowComercioLocal
         private readonly TextBox _purchaseSearch = new TextBox();
         private readonly DateTimePicker _purchaseFrom = new DateTimePicker();
         private readonly DateTimePicker _purchaseTo = new DateTimePicker();
+        private bool _loadingPurchaseSupplierFilter;
         private readonly TextBox _supplierSearch = new TextBox();
         private readonly TextBox _debtorSearch = new TextBox();
         private readonly Label _summary = new Label();
@@ -496,16 +497,13 @@ namespace RMCFlowComercioLocal
             page.Controls.Add(new Label { Text = "A compra aumenta o estoque e, se desejado, gera a conta a pagar.", Location = new Point(420, 23), AutoSize = true, ForeColor = Color.FromArgb(53,73,94) });
 
             page.Controls.Add(new Label { Text = "Fornecedor:", Location = new Point(18, 68), AutoSize = true });
-            var options = new DataTable(); options.Columns.Add("id", typeof(long)); options.Columns.Add("display_name", typeof(string));
-            options.Rows.Add(0L, "Todos os fornecedores");
-            foreach (DataRow supplier in _database.GetSuppliers().Rows) options.Rows.Add(Convert.ToInt64(supplier["Código"]), Convert.ToString(supplier["Fornecedor"]));
-            _purchaseSupplierFilter.DataSource = options; _purchaseSupplierFilter.DisplayMember = "display_name"; _purchaseSupplierFilter.ValueMember = "id"; _purchaseSupplierFilter.DropDownStyle = ComboBoxStyle.DropDownList;
-            _purchaseSupplierFilter.Location = new Point(92, 64); _purchaseSupplierFilter.Size = new Size(180, 24); _purchaseSupplierFilter.SelectedIndexChanged += (s,e) => RefreshPurchaseSearch(); page.Controls.Add(_purchaseSupplierFilter);
+            LoadPurchaseSupplierFilter();
+            _purchaseSupplierFilter.Location = new Point(90, 64); _purchaseSupplierFilter.Size = new Size(160, 24); _purchaseSupplierFilter.SelectedIndexChanged += (s,e) => { if (!_loadingPurchaseSupplierFilter) RefreshPurchaseSearch(); }; page.Controls.Add(_purchaseSupplierFilter);
 
-            page.Controls.Add(new Label { Text = "Buscar nota / compra:", Location = new Point(285, 68), AutoSize = true });
-            _purchaseSearch.Location = new Point(410, 64); _purchaseSearch.Size = new Size(190, 24); _purchaseSearch.TextChanged += (s,e) => RefreshPurchaseSearch(); page.Controls.Add(_purchaseSearch);
-            page.Controls.Add(new Label { Text = "De:", Location = new Point(610, 68), AutoSize = true }); ConfigureFilterDate(_purchaseFrom, new Point(638, 64), 108, RefreshPurchaseSearch); page.Controls.Add(_purchaseFrom);
-            page.Controls.Add(new Label { Text = "Até:", Location = new Point(755, 68), AutoSize = true }); ConfigureFilterDate(_purchaseTo, new Point(785, 64), 108, RefreshPurchaseSearch); page.Controls.Add(_purchaseTo);
+            page.Controls.Add(new Label { Text = "Buscar:", Location = new Point(260, 68), AutoSize = true });
+            _purchaseSearch.Location = new Point(300, 64); _purchaseSearch.Size = new Size(205, 24); _purchaseSearch.TextChanged += (s,e) => RefreshPurchaseSearch(); page.Controls.Add(_purchaseSearch);
+            page.Controls.Add(new Label { Text = "De:", Location = new Point(515, 68), AutoSize = true }); ConfigureFilterDate(_purchaseFrom, new Point(540, 64), 105, RefreshPurchaseSearch); page.Controls.Add(_purchaseFrom);
+            page.Controls.Add(new Label { Text = "Até:", Location = new Point(655, 68), AutoSize = true }); ConfigureFilterDate(_purchaseTo, new Point(685, 64), 105, RefreshPurchaseSearch); page.Controls.Add(_purchaseTo);
 
             _purchases.Location = new Point(18, 102); _purchases.Size = new Size(960, 380); _purchases.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             _purchases.CellDoubleClick += (s,e) => { if (e.RowIndex >= 0) OpenSelectedPurchase(); };
@@ -548,7 +546,7 @@ namespace RMCFlowComercioLocal
         private void RefreshData()
         {
             var clients = _database.FindClients(_clientSearch.Text.Trim()); var vehicles = _database.FindVehicles(_vehicleSearch.Text.Trim()); var orders = _database.FindWorkOrders(string.IsNullOrEmpty(_workOrderStatus.Text)?"Todos":_workOrderStatus.Text,_workOrderSearch.Text.Trim(),OptionalFilterDate(_workOrderFrom),OptionalFilterDate(_workOrderTo));
-            _clients.DataSource = clients; _vehicles.DataSource = vehicles; _appointments.DataSource=_database.FindAppointments(_appointmentSearch.Text.Trim(), string.IsNullOrEmpty(_appointmentStatus.Text) ? "Todos" : _appointmentStatus.Text, AppointmentFilterDate(_appointmentFromEnabled,_appointmentFrom), AppointmentFilterDate(_appointmentToEnabled,_appointmentTo)); _workOrders.DataSource = orders; _quotes.DataSource = _database.FindQuotes(string.IsNullOrEmpty(_quoteStatus.Text)?"Todos":_quoteStatus.Text,_quoteSearch.Text.Trim(),OptionalFilterDate(_quoteFrom),OptionalFilterDate(_quoteTo)); _products.DataSource = _database.FindProductsForList(_productSearch.Text.Trim()); _services.DataSource = _database.FindServicesForList(_serviceSearch.Text.Trim()); _stockMovements.DataSource = _database.GetStockMovements(); _financial.DataSource = _database.FindFinancialEntries(string.IsNullOrEmpty(_financialStatus.Text) ? "Todos" : _financialStatus.Text, _financialSearch.Text.Trim()); ConfigureFinancialGrid(); RefreshPurchaseSearch(); _suppliers.DataSource=_database.GetSuppliers(); _debtors.DataSource=_database.GetDebtors(); _financialCategories.DataSource=_database.GetFinancialCategories();
+            _clients.DataSource = clients; _vehicles.DataSource = vehicles; _appointments.DataSource=_database.FindAppointments(_appointmentSearch.Text.Trim(), string.IsNullOrEmpty(_appointmentStatus.Text) ? "Todos" : _appointmentStatus.Text, AppointmentFilterDate(_appointmentFromEnabled,_appointmentFrom), AppointmentFilterDate(_appointmentToEnabled,_appointmentTo)); _workOrders.DataSource = orders; _quotes.DataSource = _database.FindQuotes(string.IsNullOrEmpty(_quoteStatus.Text)?"Todos":_quoteStatus.Text,_quoteSearch.Text.Trim(),OptionalFilterDate(_quoteFrom),OptionalFilterDate(_quoteTo)); _products.DataSource = _database.FindProductsForList(_productSearch.Text.Trim()); _services.DataSource = _database.FindServicesForList(_serviceSearch.Text.Trim()); _stockMovements.DataSource = _database.GetStockMovements(); _financial.DataSource = _database.FindFinancialEntries(string.IsNullOrEmpty(_financialStatus.Text) ? "Todos" : _financialStatus.Text, _financialSearch.Text.Trim()); ConfigureFinancialGrid(); LoadPurchaseSupplierFilter(); RefreshPurchaseSearch(); _suppliers.DataSource=_database.GetSuppliers(); _debtors.DataSource=_database.GetDebtors(); _financialCategories.DataSource=_database.GetFinancialCategories();
             if (_workOrders.Columns["client_id"] != null) { _workOrders.Columns["client_id"].Visible = false; _workOrders.Columns["vehicle_id"].Visible = false; _workOrders.Columns["estado_entrada"].Visible = false; _workOrders.Columns["acessorios_recebidos"].Visible = false; _workOrders.Columns["reclamacao"].Visible = false; _workOrders.Columns["diagnostico"].Visible = false; _workOrders.Columns["observacoes"].Visible = false; _workOrders.Columns["historico_aprovacao"].Visible = false; }
             if (_quotes.Columns["client_id"] != null) { _quotes.Columns["client_id"].Visible = false; _quotes.Columns["vehicle_id"].Visible = false; _quotes.Columns["reclamacao"].Visible = false; _quotes.Columns["observacoes"].Visible = false; _quotes.Columns["os_convertida"].Visible = false; }
             ConfigureOperationalGrids();
@@ -717,6 +715,24 @@ namespace RMCFlowComercioLocal
                 }
                 else RefreshData();
             }
+        }
+
+        private void LoadPurchaseSupplierFilter()
+        {
+            long selectedId = 0;
+            if (_purchaseSupplierFilter.SelectedValue != null && _purchaseSupplierFilter.SelectedValue != DBNull.Value)
+            {
+                long.TryParse(Convert.ToString(_purchaseSupplierFilter.SelectedValue), out selectedId);
+            }
+            var options = new DataTable(); options.Columns.Add("id", typeof(long)); options.Columns.Add("display_name", typeof(string));
+            options.Rows.Add(0L, "Todos os fornecedores");
+            foreach (DataRow supplier in _database.GetSuppliers().Rows) options.Rows.Add(Convert.ToInt64(supplier["Código"]), Convert.ToString(supplier["Fornecedor"]));
+            var found = selectedId == 0;
+            foreach (DataRow option in options.Rows) if (Convert.ToInt64(option["id"]) == selectedId) found = true;
+            _loadingPurchaseSupplierFilter = true;
+            _purchaseSupplierFilter.DataSource = options; _purchaseSupplierFilter.DisplayMember = "display_name"; _purchaseSupplierFilter.ValueMember = "id";
+            _purchaseSupplierFilter.SelectedValue = found ? selectedId : 0L;
+            _loadingPurchaseSupplierFilter = false;
         }
 
         private void RefreshPurchaseSearch()
