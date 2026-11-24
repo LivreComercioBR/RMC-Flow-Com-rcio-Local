@@ -1222,8 +1222,8 @@ namespace RMCFlowComercioLocal
             _movementType.Items.AddRange(new object[] { "Suprimento", "Sangria", "Despesa", "Recebimento" }); _movementType.SelectedIndex = 0;
             _payment.Items.AddRange(new object[] { "Dinheiro", "PIX", "Débito", "Crédito", "Transferência", "Boleto", "Crediário", "Outros" }); _payment.SelectedIndex = 0;
             var categories = _database.GetFinancialCategoryLookup();
-            _category.DataSource = categories; _category.DisplayMember = "display_name"; _category.ValueMember = "name";
             if (categories.Rows.Count == 0) { _category.Items.Add("Sem categoria"); _category.SelectedIndex = 0; }
+            else { _category.DataSource = categories; _category.DisplayMember = "display_name"; _category.ValueMember = "name"; }
             _amount.DecimalPlaces = 2; _amount.Maximum = 100000000; _amount.Minimum = 0;
             _description.MaxLength = 250;
             _registerButton.Text = "Registrar"; _registerButton.Size = new Size(110, 30); _registerButton.Location = new Point(12, y); _registerButton.Anchor = AnchorStyles.Top | AnchorStyles.Left;
