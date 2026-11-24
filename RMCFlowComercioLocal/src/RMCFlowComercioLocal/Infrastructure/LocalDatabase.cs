@@ -846,6 +846,14 @@ FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id INNER JO
         public void AddCashMovement(long cashId, string type, string payment, decimal amount, string description, string category)
         {
             RequirePermission("cash.movement");
+            InsertCashMovement(cashId,type,payment,amount,description,category);
+        }
+        private void AddAutomaticCashMovement(long cashId, string type, string payment, decimal amount, string description)
+        {
+            InsertCashMovement(cashId,type,payment,amount,description,"");
+        }
+        private void InsertCashMovement(long cashId, string type, string payment, decimal amount, string description, string category)
+        {
             using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
             using (var command = new SQLiteCommand("INSERT INTO cash_movements (cash_session_id,movement_type,payment_method,amount,description,created_at,category) VALUES (@cash,@type,@payment,@amount,@description,@created,@category)",connection))
             {
@@ -1052,7 +1060,7 @@ ORDER BY 9, 2, 3;");
             using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
             using (var command = new SQLiteCommand("UPDATE financial_entries SET status='Pago', paid_at=@paid, payment_method=@payment WHERE id=@id AND status='Pendente'", connection))
             { connection.Open(); command.Parameters.AddWithValue("@paid", paidAt.ToString("o")); command.Parameters.AddWithValue("@payment", paymentMethod); command.Parameters.AddWithValue("@id", id); command.ExecuteNonQuery(); }
-            if (paymentMethod == "Dinheiro") AddCashMovement(Convert.ToInt64(openCash.Rows[0]["id"]), type == "Receber" ? "Recebimento financeiro" : "Pagamento financeiro", "Dinheiro", type == "Receber" ? amount : -amount, description);
+            if (paymentMethod == "Dinheiro") AddAutomaticCashMovement(Convert.ToInt64(openCash.Rows[0]["id"]), type == "Receber" ? "Recebimento financeiro" : "Pagamento financeiro", "Dinheiro", type == "Receber" ? amount : -amount, description);
             AddAudit("financial_entry_paid", id.ToString());
         }
 
@@ -1073,7 +1081,7 @@ ORDER BY 9, 2, 3;");
                     foreach (DataRow item in items.Rows) using (var detail = new SQLiteCommand("INSERT INTO sale_items (sale_id,product_id,description,quantity,unit_price,total) VALUES (@sale,@product,@description,@quantity,@unit,@total)", connection, transaction)) { var quantity = Convert.ToDecimal(item["quantity"]); var price = Convert.ToDecimal(item["unit_price"]); detail.Parameters.AddWithValue("@sale",saleId); detail.Parameters.AddWithValue("@product",Convert.ToInt64(item["product_id"])); detail.Parameters.AddWithValue("@description",Convert.ToString(item["description"])); detail.Parameters.AddWithValue("@quantity",quantity); detail.Parameters.AddWithValue("@unit",price); detail.Parameters.AddWithValue("@total",quantity*price); detail.ExecuteNonQuery(); } transaction.Commit(); }
             }
             foreach (DataRow item in items.Rows) MoveStock(Convert.ToInt64(item["product_id"]), -Convert.ToDecimal(item["quantity"]), "Venda PDV", "Venda " + number, null, null);
-            AddCashMovement(cashId,"Venda PDV",paymentMethod,total,"Venda " + number);
+            AddAutomaticCashMovement(cashId,"Venda PDV",paymentMethod,total,"Venda " + number);
             using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;")) using (var financial = new SQLiteCommand("INSERT INTO financial_entries (entry_type,description,document_number,amount,due_date,paid_at,payment_method,status,origin,sale_id,created_at) VALUES ('Receber',@description,@document,@amount,@due,@paid,@payment,'Pago','PDV',@sale,@created)", connection)) { connection.Open(); financial.Parameters.AddWithValue("@description", "Venda " + number); financial.Parameters.AddWithValue("@document", number); financial.Parameters.AddWithValue("@amount", total); financial.Parameters.AddWithValue("@due", DateTime.Now.ToString("yyyy-MM-dd")); financial.Parameters.AddWithValue("@paid", DateTime.UtcNow.ToString("o")); financial.Parameters.AddWithValue("@payment", paymentMethod); financial.Parameters.AddWithValue("@sale", saleId); financial.Parameters.AddWithValue("@created", DateTime.UtcNow.ToString("o")); financial.ExecuteNonQuery(); }
             AddAudit("sale_saved", number);
         }
@@ -1221,7 +1229,7 @@ ON CONFLICT(id) DO UPDATE SET client_id=@client_id, vehicle_id=@vehicle_id, stat
             string number, client; decimal amount; using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;")) using (var read = new SQLiteCommand("SELECT work_orders.number,clients.name,COALESCE((SELECT SUM(quantity*unit_price) FROM work_order_items WHERE work_order_id=work_orders.id),0) FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id WHERE work_orders.id=@id", connection)) { connection.Open();read.Parameters.AddWithValue("@id",workOrderId);using(var r=read.ExecuteReader()){if(!r.Read())throw new InvalidOperationException("OS não encontrada.");number=Convert.ToString(r[0]);client=Convert.ToString(r[1]);amount=Convert.ToDecimal(r[2]);}using(var check=new SQLiteCommand("SELECT COUNT(1) FROM financial_entries WHERE work_order_id=@id AND status='Pago'",connection)){check.Parameters.AddWithValue("@id",workOrderId);if(Convert.ToInt32(check.ExecuteScalar())>0)throw new InvalidOperationException("Esta OS já possui recebimento registrado.");}}
             DataTable open=null;if(paymentMethod=="Dinheiro"){open=GetOpenCash();if(open.Rows.Count==0)throw new InvalidOperationException("Abra o caixa antes de receber em dinheiro.");}
             using(var connection=new SQLiteConnection("Data Source="+_databasePath+";Version=3;"))using(var command=new SQLiteCommand("INSERT INTO financial_entries (entry_type,party_name,category,description,document_number,amount,due_date,paid_at,payment_method,status,origin,work_order_id,created_at) VALUES ('Receber',@party,'Serviços',@description,@document,@amount,@due,@paid,@payment,'Pago','OS',@os,@created)",connection)){connection.Open();command.Parameters.AddWithValue("@party",client);command.Parameters.AddWithValue("@description","Recebimento da OS "+number);command.Parameters.AddWithValue("@document",number);command.Parameters.AddWithValue("@amount",amount);command.Parameters.AddWithValue("@due",DateTime.Now.ToString("yyyy-MM-dd"));command.Parameters.AddWithValue("@paid",DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));command.Parameters.AddWithValue("@payment",paymentMethod);command.Parameters.AddWithValue("@os",workOrderId);command.Parameters.AddWithValue("@created",DateTime.UtcNow.ToString("o"));command.ExecuteNonQuery();}
-            if(paymentMethod=="Dinheiro")AddCashMovement(Convert.ToInt64(open.Rows[0]["id"]),"Recebimento de OS","Dinheiro",amount,"Recebimento da OS "+number);
+            if(paymentMethod=="Dinheiro")AddAutomaticCashMovement(Convert.ToInt64(open.Rows[0]["id"]),"Recebimento de OS","Dinheiro",amount,"Recebimento da OS "+number);
             UpdateWorkOrderStatus(workOrderId,"Pronta para retirada");
             AddAudit("work_order_received",number+": "+paymentMethod);
         }
