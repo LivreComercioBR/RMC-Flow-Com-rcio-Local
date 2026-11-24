@@ -45,6 +45,10 @@ namespace RMCFlowComercioLocal
         private readonly DataGridView _debtors = Grid();
         private readonly DataGridView _financialCategories = Grid();
         private readonly DataGridView _purchases = Grid();
+        private readonly ComboBox _purchaseSupplierFilter = new ComboBox();
+        private readonly TextBox _purchaseSearch = new TextBox();
+        private readonly DateTimePicker _purchaseFrom = new DateTimePicker();
+        private readonly DateTimePicker _purchaseTo = new DateTimePicker();
         private readonly TextBox _supplierSearch = new TextBox();
         private readonly TextBox _debtorSearch = new TextBox();
         private readonly Label _summary = new Label();
@@ -485,9 +489,28 @@ namespace RMCFlowComercioLocal
         }
         private TabPage PurchasesPage()
         {
-            var page=Page("Compras"); page.Controls.Add(TopButton("Nova compra",18,(s,e)=>{using(var form=new PurchaseEditor(_database))form.ShowDialog(this);RefreshData();})); page.Controls.Add(TopButton("Cancelar / devolver",145,(s,e)=>CancelSelectedPurchase()));
-            page.Controls.Add(new Label{Text="A compra aumenta o estoque e, se desejado, gera a conta a pagar ao fornecedor.",Location=new Point(290,23),AutoSize=true,ForeColor=Color.FromArgb(53,73,94)});
-            _purchases.Location=new Point(18,62);_purchases.Size=new Size(960,420);_purchases.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;page.Controls.Add(_purchases);return page;
+            var page = Page("Compras");
+            page.Controls.Add(TopButton("Nova compra", 18, (s,e) => CreatePurchase()));
+            page.Controls.Add(TopButton("Abrir compra", 145, (s,e) => OpenSelectedPurchase()));
+            page.Controls.Add(TopButton("Cancelar / devolver", 272, (s,e) => CancelSelectedPurchase()));
+            page.Controls.Add(new Label { Text = "A compra aumenta o estoque e, se desejado, gera a conta a pagar.", Location = new Point(420, 23), AutoSize = true, ForeColor = Color.FromArgb(53,73,94) });
+
+            page.Controls.Add(new Label { Text = "Fornecedor:", Location = new Point(18, 68), AutoSize = true });
+            var options = new DataTable(); options.Columns.Add("id", typeof(long)); options.Columns.Add("display_name", typeof(string));
+            options.Rows.Add(0L, "Todos os fornecedores");
+            foreach (DataRow supplier in _database.GetSuppliers().Rows) options.Rows.Add(Convert.ToInt64(supplier["Código"]), Convert.ToString(supplier["Fornecedor"]));
+            _purchaseSupplierFilter.DataSource = options; _purchaseSupplierFilter.DisplayMember = "display_name"; _purchaseSupplierFilter.ValueMember = "id"; _purchaseSupplierFilter.DropDownStyle = ComboBoxStyle.DropDownList;
+            _purchaseSupplierFilter.Location = new Point(92, 64); _purchaseSupplierFilter.Size = new Size(180, 24); _purchaseSupplierFilter.SelectedIndexChanged += (s,e) => RefreshPurchaseSearch(); page.Controls.Add(_purchaseSupplierFilter);
+
+            page.Controls.Add(new Label { Text = "Buscar nota / compra:", Location = new Point(285, 68), AutoSize = true });
+            _purchaseSearch.Location = new Point(410, 64); _purchaseSearch.Size = new Size(190, 24); _purchaseSearch.TextChanged += (s,e) => RefreshPurchaseSearch(); page.Controls.Add(_purchaseSearch);
+            page.Controls.Add(new Label { Text = "De:", Location = new Point(610, 68), AutoSize = true }); ConfigureFilterDate(_purchaseFrom, new Point(638, 64), 108, RefreshPurchaseSearch); page.Controls.Add(_purchaseFrom);
+            page.Controls.Add(new Label { Text = "Até:", Location = new Point(755, 68), AutoSize = true }); ConfigureFilterDate(_purchaseTo, new Point(785, 64), 108, RefreshPurchaseSearch); page.Controls.Add(_purchaseTo);
+
+            _purchases.Location = new Point(18, 102); _purchases.Size = new Size(960, 380); _purchases.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            _purchases.CellDoubleClick += (s,e) => { if (e.RowIndex >= 0) OpenSelectedPurchase(); };
+            page.Controls.Add(_purchases);
+            return page;
         }
         private TabPage SuppliersPage()
         {
@@ -525,7 +548,7 @@ namespace RMCFlowComercioLocal
         private void RefreshData()
         {
             var clients = _database.FindClients(_clientSearch.Text.Trim()); var vehicles = _database.FindVehicles(_vehicleSearch.Text.Trim()); var orders = _database.FindWorkOrders(string.IsNullOrEmpty(_workOrderStatus.Text)?"Todos":_workOrderStatus.Text,_workOrderSearch.Text.Trim(),OptionalFilterDate(_workOrderFrom),OptionalFilterDate(_workOrderTo));
-            _clients.DataSource = clients; _vehicles.DataSource = vehicles; _appointments.DataSource=_database.FindAppointments(_appointmentSearch.Text.Trim(), string.IsNullOrEmpty(_appointmentStatus.Text) ? "Todos" : _appointmentStatus.Text, AppointmentFilterDate(_appointmentFromEnabled,_appointmentFrom), AppointmentFilterDate(_appointmentToEnabled,_appointmentTo)); _workOrders.DataSource = orders; _quotes.DataSource = _database.FindQuotes(string.IsNullOrEmpty(_quoteStatus.Text)?"Todos":_quoteStatus.Text,_quoteSearch.Text.Trim(),OptionalFilterDate(_quoteFrom),OptionalFilterDate(_quoteTo)); _products.DataSource = _database.FindProductsForList(_productSearch.Text.Trim()); _services.DataSource = _database.FindServicesForList(_serviceSearch.Text.Trim()); _stockMovements.DataSource = _database.GetStockMovements(); _financial.DataSource = _database.FindFinancialEntries(string.IsNullOrEmpty(_financialStatus.Text) ? "Todos" : _financialStatus.Text, _financialSearch.Text.Trim()); ConfigureFinancialGrid(); _purchases.DataSource=_database.GetPurchases(); _suppliers.DataSource=_database.GetSuppliers(); _debtors.DataSource=_database.GetDebtors(); _financialCategories.DataSource=_database.GetFinancialCategories();
+            _clients.DataSource = clients; _vehicles.DataSource = vehicles; _appointments.DataSource=_database.FindAppointments(_appointmentSearch.Text.Trim(), string.IsNullOrEmpty(_appointmentStatus.Text) ? "Todos" : _appointmentStatus.Text, AppointmentFilterDate(_appointmentFromEnabled,_appointmentFrom), AppointmentFilterDate(_appointmentToEnabled,_appointmentTo)); _workOrders.DataSource = orders; _quotes.DataSource = _database.FindQuotes(string.IsNullOrEmpty(_quoteStatus.Text)?"Todos":_quoteStatus.Text,_quoteSearch.Text.Trim(),OptionalFilterDate(_quoteFrom),OptionalFilterDate(_quoteTo)); _products.DataSource = _database.FindProductsForList(_productSearch.Text.Trim()); _services.DataSource = _database.FindServicesForList(_serviceSearch.Text.Trim()); _stockMovements.DataSource = _database.GetStockMovements(); _financial.DataSource = _database.FindFinancialEntries(string.IsNullOrEmpty(_financialStatus.Text) ? "Todos" : _financialStatus.Text, _financialSearch.Text.Trim()); ConfigureFinancialGrid(); RefreshPurchaseSearch(); _suppliers.DataSource=_database.GetSuppliers(); _debtors.DataSource=_database.GetDebtors(); _financialCategories.DataSource=_database.GetFinancialCategories();
             if (_workOrders.Columns["client_id"] != null) { _workOrders.Columns["client_id"].Visible = false; _workOrders.Columns["vehicle_id"].Visible = false; _workOrders.Columns["estado_entrada"].Visible = false; _workOrders.Columns["acessorios_recebidos"].Visible = false; _workOrders.Columns["reclamacao"].Visible = false; _workOrders.Columns["diagnostico"].Visible = false; _workOrders.Columns["observacoes"].Visible = false; _workOrders.Columns["historico_aprovacao"].Visible = false; }
             if (_quotes.Columns["client_id"] != null) { _quotes.Columns["client_id"].Visible = false; _quotes.Columns["vehicle_id"].Visible = false; _quotes.Columns["reclamacao"].Visible = false; _quotes.Columns["observacoes"].Visible = false; _quotes.Columns["os_convertida"].Visible = false; }
             ConfigureOperationalGrids();
@@ -683,6 +706,43 @@ namespace RMCFlowComercioLocal
         private void EditDebtor(){var id=SelectedId(_debtors);if(id==null)return;using(var f=new DebtorEditor(_database,_debtors.CurrentRow))f.ShowDialog(this);RefreshData();}
         private void DeleteSupplier(){var id=SelectedId(_suppliers);if(id==null)return;if(MessageBox.Show("Excluir o fornecedor selecionado?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning)==DialogResult.Yes){_database.DeleteSupplier(id.Value);RefreshData();}}
         private void DeleteDebtor(){var id=SelectedId(_debtors);if(id==null)return;if(MessageBox.Show("Excluir o devedor selecionado?", "Confirmar", MessageBoxButtons.YesNo, MessageBoxIcon.Warning)==DialogResult.Yes){_database.DeleteDebtor(id.Value);RefreshData();}}
+        private void CreatePurchase()
+        {
+            using (var form = new PurchaseEditor(_database))
+            {
+                if (form.ShowDialog(this) == DialogResult.OK && form.SavedPurchaseId.HasValue)
+                {
+                    RefreshData();
+                    OpenPurchaseDocument(form.SavedPurchaseId.Value);
+                }
+                else RefreshData();
+            }
+        }
+
+        private void RefreshPurchaseSearch()
+        {
+            long? supplierId = null;
+            if (_purchaseSupplierFilter.SelectedValue != null && _purchaseSupplierFilter.SelectedValue != DBNull.Value)
+            {
+                var selected = Convert.ToInt64(_purchaseSupplierFilter.SelectedValue);
+                if (selected > 0) supplierId = selected;
+            }
+            _purchases.DataSource = _database.FindPurchases(_purchaseSearch.Text.Trim(), supplierId, OptionalFilterDate(_purchaseFrom), OptionalFilterDate(_purchaseTo));
+            _purchases.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+        }
+
+        private void OpenSelectedPurchase()
+        {
+            var id = SelectedId(_purchases);
+            if (id == null) { MessageBox.Show("Selecione uma compra para visualizar.", "Compras", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+            OpenPurchaseDocument(id.Value);
+        }
+
+        private void OpenPurchaseDocument(long purchaseId)
+        {
+            using (var form = new PurchaseDocumentForm(_database, purchaseId)) form.ShowDialog(this);
+        }
+
         private void CancelSelectedPurchase(){var id=SelectedId(_purchases);if(id==null){MessageBox.Show("Selecione uma compra.");return;}if(MessageBox.Show("Cancelar/devolver a compra selecionada?\n\nO estoque será estornado e as parcelas pendentes serão canceladas. Parcelas já pagas permanecerão registradas no financeiro.","Confirmar devolução",MessageBoxButtons.YesNo,MessageBoxIcon.Warning)!=DialogResult.Yes)return;try{_database.CancelPurchase(id.Value,"Cancelamento/devolução informado no módulo Compras");RefreshData();MessageBox.Show("Compra cancelada. O estoque e as parcelas pendentes foram estornados.");}catch(Exception ex){MessageBox.Show(ex.Message);}}
         private void EditFinancialCategory(){var id=SelectedId(_financialCategories);if(id==null)return;using(var f=new FinancialCategoryEditor(_database,_financialCategories.CurrentRow))f.ShowDialog(this);RefreshData();}
         private void DeleteFinancialCategory(){var id=SelectedId(_financialCategories);if(id==null)return;if(MessageBox.Show("Excluir a categoria selecionada?", "Confirmar", MessageBoxButtons.YesNo,MessageBoxIcon.Warning)==DialogResult.Yes){_database.DeleteFinancialCategory(id.Value);RefreshData();}}
@@ -1058,6 +1118,64 @@ namespace RMCFlowComercioLocal
         private void Build() { Controls.Add(new Label { Text = "Digite nome ou código do serviço:", Location = new Point(18, 18), AutoSize = true }); _search.Location = new Point(18, 40); _search.Size = new Size(490, 24); _search.TextChanged += (s, e) => RefreshResults(); Controls.Add(_search); var search = new Button { Text = "Buscar", Location = new Point(520, 38), Size = new Size(100, 28) }; search.Click += (s, e) => RefreshResults(); Controls.Add(search); _grid.Location = new Point(18, 78); _grid.Size = new Size(710, 330); _grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; _grid.ReadOnly = true; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; _grid.MultiSelect = false; _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _grid.BackgroundColor = Color.White; _grid.DoubleClick += (s, e) => SelectService(); Controls.Add(_grid); var select = new Button { Text = "Selecionar", Location = new Point(608, 425), Size = new Size(120, 32), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; select.Click += (s, e) => SelectService(); Controls.Add(select); }
         private void RefreshResults() { _grid.DataSource = _database.FindServiceLookup(_search.Text.Trim()); }
         private void SelectService() { if (_grid.CurrentRow == null) { MessageBox.Show("Selecione um serviço."); return; } SelectedId = Convert.ToInt64(_grid.CurrentRow.Cells["id"].Value); DialogResult = DialogResult.OK; }
+    }
+
+    internal sealed class PurchaseDocumentForm : Form
+    {
+        private readonly DataGridView _items = new DataGridView();
+        private readonly DataGridView _payables = new DataGridView();
+
+        public PurchaseDocumentForm(LocalDatabase database, long purchaseId)
+        {
+            Text = "Nota de compra"; StartPosition = FormStartPosition.CenterParent; Size = new Size(900, 680); MinimumSize = new Size(740, 520);
+            var header = database.GetPurchaseHeader(purchaseId);
+            if (header.Rows.Count == 0) { MessageBox.Show("Compra não encontrada."); Close(); return; }
+            Build(database, header.Rows[0], purchaseId);
+        }
+
+        private void Build(LocalDatabase database, DataRow purchase, long purchaseId)
+        {
+            Text = "Nota de compra " + Convert.ToString(purchase["number"]);
+            var root = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(16), ColumnCount = 1, RowCount = 6 };
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
+            Controls.Add(root);
+
+            var title = new Label { Text = "Nota de compra " + Convert.ToString(purchase["number"]), Font = new Font("Segoe UI", 16, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Left };
+            root.Controls.Add(title, 0, 0);
+
+            var summary = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = Color.White, CellBorderStyle = TableLayoutPanelCellBorderStyle.Single };
+            summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58)); summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
+            var supplier = Convert.ToString(purchase["supplier_name"]);
+            var supplierInfo = supplier;
+            if (!string.IsNullOrWhiteSpace(Convert.ToString(purchase["supplier_document"]))) supplierInfo += " • " + Convert.ToString(purchase["supplier_document"]);
+            if (!string.IsNullOrWhiteSpace(Convert.ToString(purchase["supplier_phone"]))) supplierInfo += " • " + Convert.ToString(purchase["supplier_phone"]);
+            var invoice = Convert.ToString(purchase["invoice_number"]); if (string.IsNullOrWhiteSpace(invoice)) invoice = "Não informada";
+            summary.Controls.Add(SummaryLabel("Fornecedor: " + supplierInfo), 0, 0);
+            summary.Controls.Add(SummaryLabel("Compra: " + Convert.ToString(purchase["number"]) + " • NF/documento: " + invoice), 1, 0);
+            summary.Controls.Add(SummaryLabel("Data: " + DateText(purchase["purchased_at"]) + " • Forma: " + Convert.ToString(purchase["payment_method"])), 0, 1);
+            summary.Controls.Add(SummaryLabel("Status: " + Convert.ToString(purchase["status"]) + " • Conta a pagar: " + (Convert.ToInt32(purchase["payable_generated"]) == 1 ? "Sim" : "Não")), 1, 1);
+            root.Controls.Add(summary, 0, 1);
+
+            root.Controls.Add(new Label { Text = "Itens da compra", Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Bottom }, 0, 2);
+            ConfigureGrid(_items); _items.DataSource = database.GetPurchaseItems(purchaseId); root.Controls.Add(_items, 0, 3);
+            root.Controls.Add(new Label { Text = "Parcelas / contas a pagar", Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Bottom }, 0, 4);
+            ConfigureGrid(_payables); _payables.DataSource = database.GetPurchasePayables(purchaseId); root.Controls.Add(_payables, 0, 5);
+
+            var total = new Label { Text = "Total da compra: " + Convert.ToDecimal(purchase["total"]).ToString("C2"), Font = new Font("Segoe UI", 12, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Bottom | AnchorStyles.Right, Location = new Point(0, 0) };
+            Controls.Add(total); total.BringToFront();
+            if (!string.IsNullOrWhiteSpace(Convert.ToString(purchase["cancellation_reason"])))
+                summary.Controls.Add(SummaryLabel("Motivo do cancelamento: " + Convert.ToString(purchase["cancellation_reason"])), 0, 1);
+        }
+
+        private static Label SummaryLabel(string text) { return new Label { Text = text, Dock = DockStyle.Fill, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8), AutoEllipsis = true }; }
+        private static string DateText(object value) { DateTime date; return DateTime.TryParse(Convert.ToString(value), out date) ? date.ToString("dd/MM/yyyy") : Convert.ToString(value); }
+        private static void ConfigureGrid(DataGridView grid) { grid.Dock = DockStyle.Fill; grid.ReadOnly = true; grid.AllowUserToAddRows = false; grid.AllowUserToDeleteRows = false; grid.RowHeadersVisible = false; grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; grid.BackgroundColor = Color.White; }
     }
 
     internal sealed class PurchaseEditor : Form
