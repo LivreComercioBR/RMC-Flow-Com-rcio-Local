@@ -1526,7 +1526,7 @@ namespace RMCFlowComercioLocal
             var update = new Button { Text = "Atualizar", Location = new Point(465, 38), Size = new Size(100, 28) }; update.Click += (s, e) => RefreshResults(); Controls.Add(update);
             _summary.Location = new Point(18, 78); _summary.AutoSize = true; _summary.Font = new Font("Segoe UI", 9, FontStyle.Bold); Controls.Add(_summary);
             _grid.Location = new Point(18, 108); _grid.Size = new Size(1060, 510); _grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-            _grid.ReadOnly = true; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None; _grid.BackgroundColor = Color.White; _grid.RowHeadersVisible = false; Controls.Add(_grid);
+            _grid.ReadOnly = true; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None; _grid.BackgroundColor = Color.White; _grid.RowHeadersVisible = false; _grid.CellBeginEdit += (s, e) => { if (_grid.Columns[e.ColumnIndex].Name == "is_paid" && e.RowIndex > 0) e.Cancel = true; }; Controls.Add(_grid);
             _period.SelectedIndex = 0;
         }
 
@@ -1604,7 +1604,6 @@ namespace RMCFlowComercioLocal
                 _schedule.Rows.Add(due, amount, paid, paid ? Convert.ToString(_entryMethod.SelectedItem) : _method);
             }
             _grid.DataSource = _schedule;
-            _grid.CellBeginEdit += (s, e) => { if (_grid.Columns[e.ColumnIndex].Name == "is_paid" && e.RowIndex > 0) e.Cancel = true; };
             _grid.Columns["due_date"].HeaderText = "Vencimento"; _grid.Columns["due_date"].DefaultCellStyle.Format = "dd/MM/yyyy";
             _grid.Columns["amount"].HeaderText = "Valor (R$)"; _grid.Columns["amount"].DefaultCellStyle.Format = "N2";
             _grid.Columns["is_paid"].HeaderText = "Recebida na venda"; _grid.Columns["is_paid"].Width = 120;
