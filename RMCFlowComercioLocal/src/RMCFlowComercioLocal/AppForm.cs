@@ -733,8 +733,28 @@ namespace RMCFlowComercioLocal
         private void Build(){var data=_database.GetQuoteDocument(_quoteId);if(data.Rows.Count==0){MessageBox.Show("Orçamento não encontrado.");Close();return;}_quote=data.Rows[0];var print=new Button{Text="Imprimir A4 / PDF",Location=new Point(18,14),Size=new Size(140,32)};print.Click+=(s,e)=>PrintDocument(false);Controls.Add(print);var thermal=new Button{Text="Imprimir cupom",Location=new Point(164,14),Size=new Size(130,32)};thermal.Click+=(s,e)=>PrintDocument(true);Controls.Add(thermal);var whats=new Button{Text="Enviar pelo WhatsApp",Location=new Point(300,14),Size=new Size(160,32)};whats.Click+=SendWhatsApp;Controls.Add(whats);_browser.Location=new Point(18,58);_browser.Size=new Size(845,560);_browser.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right;_browser.DocumentText=Html();Controls.Add(_browser);}
         private void PrintDocument(bool thermal){if(_browser.Document==null||_browser.Document.Body==null){MessageBox.Show("Aguarde o documento terminar de carregar.");return;}_browser.Document.Body.SetAttribute("class",thermal?"thermal":"a4");_browser.ShowPrintPreviewDialog();}
         private string Html(){var items=_database.GetQuoteItems(_quoteId);var lines="";foreach(DataRow item in items.Rows)lines+="<tr><td>"+H(item["Tipo"])+"</td><td>"+H(item["Descrição"])+"</td><td class='right'>"+H(item["Qtd."])+"</td><td class='right'>"+H(item["Valor unitário"])+"</td><td class='right'>"+H(item["Total"])+"</td></tr>";var approval=string.IsNullOrWhiteSpace(Convert.ToString(_quote["approved_at"]))?"<p>Aprovação do cliente: ___________________________________________</p>":"<h2>Aprovação registrada</h2><p><b>Data/hora:</b> "+H(_quote["approved_at"])+"<br><b>Forma:</b> "+H(_quote["approval_method"])+"<br><b>Observação:</b> "+H(_quote["approval_notes"])+"</p>";var companyHeader=DocumentHeaderHtml.Build(_database);return "<html><head><style>@page{size:A4;margin:14mm}body{font-family:Segoe UI,Arial;color:#17304a;margin:30px}"+DocumentHeaderHtml.Css+"body.thermal{width:72mm;margin:4mm auto;font-size:10pt}body.thermal h1{font-size:15pt}body.thermal h2{font-size:11pt}body.thermal table{font-size:9pt}body.thermal th,body.thermal td{padding:3px}body.thermal .total{font-size:12pt}h1{color:#087b94;margin:0}h2{border-bottom:2px solid #20bdc8;padding-bottom:6px;font-size:16px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #ccd6df;padding:7px;text-align:left}th{background:#eef8fa}.right{text-align:right}.total{font-size:18px;font-weight:bold;text-align:right;margin-top:16px}.muted{color:#52687a}</style></head><body>"+companyHeader+"<p class='muted'>ORÇAMENTO — "+H(_quote["number"])+"</p><h2>Cliente e equipamento</h2><p><b>Cliente:</b> "+H(_quote["client_name"])+"<br><b>Telefone:</b> "+H(_quote["client_phone"])+"<br><b>Equipamento:</b> "+H(_quote["vehicle_type"])+" "+H(_quote["manufacturer"])+" "+H(_quote["model"])+"<br><b>Identificador:</b> "+H(_quote["plate"])+"</p><h2>Condições</h2><p><b>Status:</b> "+H(_quote["status"])+"<br><b>Válido até:</b> "+H(_quote["valid_until"])+"<br><b>Problema relatado:</b> "+H(_quote["complaint"])+"<br><b>Observações:</b> "+H(_quote["notes"])+"</p><h2>Itens</h2><table><tr><th>Tipo</th><th>Descrição</th><th>Qtd.</th><th>Valor unitário</th><th>Total</th></tr>"+lines+"</table><p class='total'>Total: "+_database.GetQuoteSubtotal(_quoteId).ToString("C2")+"</p>"+approval+"</body></html>";}
-        private void SendWhatsApp(object sender,EventArgs e){var phone=PhoneFormatter.ToWhatsApp(Convert.ToString(_quote["client_phone"]));if(phone==null){MessageBox.Show("Telefone do cliente inválido. Edite o cadastro com DDD e número.");return;}var message="Olá, "+Convert.ToString(_quote["client_name"])+". Segue o orçamento "+Convert.ToString(_quote["number"])+" no valor de "+_database.GetQuoteSubtotal(_quoteId).ToString("C2")+". Válido até "+Convert.ToString(_quote["valid_until"])+".";System.Diagnostics.Process.Start("https://wa.me/"+phone+"?text="+Uri.EscapeDataString(message));}
+        private void SendWhatsApp(object sender,EventArgs e){var phone=PhoneFormatter.ToWhatsApp(Convert.ToString(_quote["client_phone"]));if(phone==null){MessageBox.Show("Telefone do cliente inválido. Edite o cadastro com DDD e número.");return;}var message="Olá, "+Convert.ToString(_quote["client_name"])+". Segue o orçamento "+Convert.ToString(_quote["number"])+" no valor de "+_database.GetQuoteSubtotal(_quoteId).ToString("C2")+". Válido até "+Convert.ToString(_quote["valid_until"])+".";WhatsAppDocumentFlow.Prepare(_browser,phone,message);}
         private static string H(object value){return System.Web.HttpUtility.HtmlEncode(Convert.ToString(value)).Replace("\r\n","<br>");}
+    }
+
+    internal static class WhatsAppDocumentFlow
+    {
+        public static void Prepare(WebBrowser browser, string phone, string message)
+        {
+            if (browser == null || browser.Document == null || browser.Document.Body == null)
+            {
+                MessageBox.Show("Aguarde o documento terminar de carregar.", "WhatsApp", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+            var prepare = MessageBox.Show("Será aberta a pré-visualização do documento. Escolha Imprimir e selecione Microsoft Print to PDF para salvar o arquivo.\n\nDepois da pré-visualização, o WhatsApp será aberto para você anexar o PDF salvo. O WhatsApp não anexa o arquivo automaticamente.", "Preparar PDF para WhatsApp", MessageBoxButtons.OKCancel, MessageBoxIcon.Information);
+            if (prepare != DialogResult.OK) return;
+            browser.Document.Body.SetAttribute("class", "a4");
+            browser.ShowPrintPreviewDialog();
+            var proceed = MessageBox.Show("Se o PDF já foi salvo, clique em Sim para abrir a conversa do cliente e anexá-lo.\n\nDeseja abrir o WhatsApp agora?", "Anexar PDF", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (proceed != DialogResult.Yes) return;
+            try { System.Diagnostics.Process.Start("https://wa.me/" + phone + "?text=" + Uri.EscapeDataString(message)); }
+            catch (Exception ex) { MessageBox.Show("Não foi possível abrir o WhatsApp: " + ex.Message, "WhatsApp", MessageBoxButtons.OK, MessageBoxIcon.Warning); }
+        }
     }
 
     internal sealed class WorkOrderPaymentForm : Form
@@ -905,8 +925,8 @@ namespace RMCFlowComercioLocal
         private void SendWhatsApp(object sender, EventArgs e)
         {
             var phone = PhoneFormatter.ToWhatsApp(Convert.ToString(_order["client_phone"])); if (phone == null) { MessageBox.Show("Telefone do cliente inválido. Edite o cadastro com DDD e número."); return; }
-            var message = "Olá, " + Convert.ToString(_order["client_name"]) + ". Segue o orçamento/OS " + Convert.ToString(_order["number"]) + " no valor de " + _database.GetWorkOrderSubtotal(_workOrderId).ToString("C2") + ".";
-            System.Diagnostics.Process.Start("https://wa.me/" + phone + "?text=" + Uri.EscapeDataString(message));
+            var message = "Olá, " + Convert.ToString(_order["client_name"]) + ". Segue o documento da OS " + Convert.ToString(_order["number"]) + " no valor de " + _database.GetWorkOrderSubtotal(_workOrderId).ToString("C2") + ".";
+            WhatsAppDocumentFlow.Prepare(_preview, phone, message);
         }
         private static string H(object value) { return System.Web.HttpUtility.HtmlEncode(Convert.ToString(value)).Replace("\r\n", "<br>"); }
     }
@@ -1145,7 +1165,7 @@ namespace RMCFlowComercioLocal
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 54));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 270));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 300));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 170));
             Controls.Add(root);
@@ -1580,11 +1600,8 @@ namespace RMCFlowComercioLocal
             var sale=data.Rows[0];
             var phone=PhoneFormatter.ToWhatsApp(Convert.ToString(sale["client_phone"]));
             if(phone==null){MessageBox.Show("Esta venda não possui cliente com telefone válido. Cadastre o cliente com DDD e telefone antes de finalizar uma nova venda.","WhatsApp",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
-            var answer=MessageBox.Show("O WhatsApp será aberto com uma mensagem pronta para o cliente. Para enviar a via completa, anexe o PDF do comprovante na conversa antes de tocar em Enviar.\n\nDeseja continuar?","Preparar envio pelo WhatsApp",MessageBoxButtons.YesNo,MessageBoxIcon.Question);
-            if(answer!=DialogResult.Yes)return;
             var message="Olá, "+Convert.ToString(sale["client_name"])+"! Segue o comprovante da venda "+number+" no valor de "+Convert.ToDecimal(sale["total"]).ToString("C2")+".";
-            try { System.Diagnostics.Process.Start("https://wa.me/"+phone+"?text="+Uri.EscapeDataString(message)); }
-            catch(Exception ex){MessageBox.Show("Não foi possível abrir o WhatsApp: "+ex.Message,"WhatsApp",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
+            WhatsAppDocumentFlow.Prepare(_browser,phone,message);
         }
     }
 
