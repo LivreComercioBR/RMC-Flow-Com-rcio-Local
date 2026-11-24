@@ -1373,8 +1373,12 @@ namespace RMCFlowComercioLocal
         public SaleReceiptForm(LocalDatabase database, string number)
         {
             Text = "Comprovante da venda " + number; StartPosition = FormStartPosition.CenterParent; Size = new Size(760, 720); MinimumSize = new Size(600, 500);
-            var print = new Button { Text = "Imprimir / Salvar PDF", Location = new Point(18, 14), Size = new Size(170, 32) };
+            var preview = new Button { Text = "Visualizar impressão", Location = new Point(18, 14), Size = new Size(148, 32) };
+            preview.Click += (s, e) => _browser.ShowPrintPreviewDialog(); Controls.Add(preview);
+            var print = new Button { Text = "Imprimir / Salvar PDF", Location = new Point(174, 14), Size = new Size(170, 32) };
             print.Click += (s, e) => _browser.ShowPrintDialog(); Controls.Add(print);
+            var whatsapp = new Button { Text = "Preparar WhatsApp", Location = new Point(354, 14), Size = new Size(160, 32) };
+            whatsapp.Click += (s, e) => SendByWhatsApp(database, number); Controls.Add(whatsapp);
             _browser.Location = new Point(18, 56); _browser.Size = new Size(710, 610); _browser.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; Controls.Add(_browser);
             var header = database.GetSaleHeader(number); var items = database.GetSaleItems(number);
             if (header.Rows.Count == 0) { _browser.DocumentText = "<html><body>Venda não encontrada.</body></html>"; return; }
@@ -1390,8 +1394,26 @@ namespace RMCFlowComercioLocal
             string customerInfo = "";
             foreach (string key in new [] { "client_document", "client_phone", "client_email" }) { var value = Convert.ToString(sale[key]); if (!string.IsNullOrWhiteSpace(value)) customerInfo += "<div>" + enc(value) + "</div>"; }
                         decimal subtotal = Convert.ToDecimal(sale["subtotal"]), discount = Convert.ToDecimal(sale["discount"]), total = Convert.ToDecimal(sale["total"]);
-            string date = enc(Convert.ToString(sale["created_at"]));
+            var dateText = Convert.ToString(sale["created_at"]);
+            DateTimeOffset parsedDate;
+            string date = DateTimeOffset.TryParse(dateText, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out parsedDate)
+                ? enc(parsedDate.LocalDateTime.ToString("dd/MM/yyyy HH:mm"))
+                : enc(dateText);
             _browser.DocumentText = "<html><head><meta charset='utf-8'><style>body{font:14px Arial;color:#172b4d;margin:30px}h2{margin:0 0 5px}.muted{color:#667085;font-size:12px}.box{border-bottom:1px solid #ccd5e0;padding:10px 0;margin-bottom:16px}.row{display:flex;justify-content:space-between;margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:8px}"+DocumentHeaderHtml.Css+"th,td{padding:8px;border-bottom:1px solid #d9e0e8;text-align:left}.num{text-align:right}.total{font-size:18px;font-weight:bold}</style></head><body>"+companyHeader+"<div class='row'><div><b>VENDA " + enc(number) + "</b><div class='muted'>" + date + "</div></div><div><b>Status:</b> " + enc(Convert.ToString(sale["status"])) + "</div></div><div class='box'><b>Cliente</b><div>" + customer + "</div>" + customerInfo + "</div><b>Itens da venda</b><table><tr><th>Produto</th><th class='num'>Quantidade</th><th class='num'>Preço unitário</th><th class='num'>Total</th></tr>" + lines + "</table><div style='margin-top:16px;text-align:right'><div>Subtotal: " + subtotal.ToString("C2") + "</div><div>Desconto: " + discount.ToString("C2") + "</div><div class='total'>Total: " + total.ToString("C2") + "</div><div>Pagamento: " + enc(Convert.ToString(sale["payment_method"])) + "</div></div><p class='muted' style='margin-top:28px'>Obrigado pela preferência!</p></body></html>";
+        }
+
+        private void SendByWhatsApp(LocalDatabase database, string number)
+        {
+            var data=database.GetSaleHeader(number);
+            if(data.Rows.Count==0){MessageBox.Show("Venda não encontrada.","WhatsApp",MessageBoxButtons.OK,MessageBoxIcon.Warning);return;}
+            var sale=data.Rows[0];
+            var phone=PhoneFormatter.ToWhatsApp(Convert.ToString(sale["client_phone"]));
+            if(phone==null){MessageBox.Show("Esta venda não possui cliente com telefone válido. Cadastre o cliente com DDD e telefone antes de finalizar uma nova venda.","WhatsApp",MessageBoxButtons.OK,MessageBoxIcon.Information);return;}
+            var answer=MessageBox.Show("O WhatsApp será aberto com uma mensagem pronta para o cliente. Para enviar a via completa, anexe o PDF do comprovante na conversa antes de tocar em Enviar.\n\nDeseja continuar?","Preparar envio pelo WhatsApp",MessageBoxButtons.YesNo,MessageBoxIcon.Question);
+            if(answer!=DialogResult.Yes)return;
+            var message="Olá, "+Convert.ToString(sale["client_name"])+"! Segue o comprovante da venda "+number+" no valor de "+Convert.ToDecimal(sale["total"]).ToString("C2")+".";
+            try { System.Diagnostics.Process.Start("https://wa.me/"+phone+"?text="+Uri.EscapeDataString(message)); }
+            catch(Exception ex){MessageBox.Show("Não foi possível abrir o WhatsApp: "+ex.Message,"WhatsApp",MessageBoxButtons.OK,MessageBoxIcon.Warning);}
         }
     }
 
