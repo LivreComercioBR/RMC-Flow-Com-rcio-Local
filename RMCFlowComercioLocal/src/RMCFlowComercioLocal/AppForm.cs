@@ -1253,7 +1253,7 @@ namespace RMCFlowComercioLocal
             panel.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Location = new Point(12, 10) });
             grid.Location = new Point(12, 42); grid.Size = new Size(900, 90); grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             grid.ReadOnly = true; grid.AllowUserToAddRows = false; grid.AllowUserToDeleteRows = false; grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; grid.BackgroundColor = Color.White; grid.RowHeadersVisible = false;
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None; grid.BackgroundColor = Color.White; grid.RowHeadersVisible = false;
             panel.Controls.Add(grid); return panel;
         }
 
@@ -1261,7 +1261,7 @@ namespace RMCFlowComercioLocal
         {
             var open = _database.GetOpenCash();
             _cashId = open.Rows.Count == 0 ? (long?)null : Convert.ToInt64(open.Rows[0]["id"]);
-            _status.Text = _cashId.HasValue ? "Caixa aberto desde " + Convert.ToDateTime(open.Rows[0]["opened_at"]).ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "Caixa fechado";
+            _status.Text = _cashId.HasValue ? "Caixa aberto desde " + Convert.ToDateTime(open.Rows[0]["opened_at"]).ToLocalTime().ToString("dd/MM/yyyy HH:mm") + " • Operador: " + (open.Rows[0]["opened_by"] == DBNull.Value || string.IsNullOrWhiteSpace(Convert.ToString(open.Rows[0]["opened_by"])) ? "não registrado (caixa anterior à atualização)" : Convert.ToString(open.Rows[0]["opened_by"])) : "Caixa fechado";
             _openButton.Enabled = !_cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.open");
             _registerButton.Enabled = _cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.movement");
             _closeButton.Enabled = _cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.close");
@@ -1272,14 +1272,40 @@ namespace RMCFlowComercioLocal
                 _metrics[1].Text = Convert.ToDecimal(summary["entries"]).ToString("C2");
                 _metrics[2].Text = Convert.ToDecimal(summary["exits"]).ToString("C2");
                 _metrics[3].Text = Convert.ToDecimal(summary["expected"]).ToString("C2");
-                _movements.DataSource = _database.GetCashMovements(_cashId.Value);
+                _movements.DataSource = _database.GetCashMovements(_cashId.Value); ConfigureMovementColumns();
             }
             else
             {
                 foreach (var metric in _metrics) metric.Text = "R$ 0,00";
                 _movements.DataSource = null;
             }
-            _history.DataSource = _database.GetCashHistory();
+            _history.DataSource = _database.GetCashHistory(); ConfigureHistoryColumns();
+        }
+
+        private void ConfigureMovementColumns()
+        {
+            string[] names = { "Código", "Hora", "Tipo", "Forma", "Categoria", "Descrição", "Entrada", "Saída" };
+            int[] widths = { 45, 92, 88, 65, 82, 130, 78, 78 };
+            for (var i = 0; i < names.Length && i < _movements.Columns.Count; i++)
+            {
+                var column = _movements.Columns[names[i]];
+                if (column == null) continue;
+                column.Width = widths[i]; column.MinimumWidth = Math.Min(widths[i], 45);
+            }
+            if (_movements.Columns["Descrição"] != null) { _movements.Columns["Descrição"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; _movements.Columns["Descrição"].MinimumWidth = 110; }
+        }
+
+        private void ConfigureHistoryColumns()
+        {
+            string[] names = { "Operador", "Abertura", "Fechamento", "Status", "Saldo inicial", "Esperado", "Contado", "Diferença", "Observações" };
+            int[] widths = { 82, 95, 95, 58, 78, 74, 74, 74, 100 };
+            for (var i = 0; i < names.Length && i < _history.Columns.Count; i++)
+            {
+                var column = _history.Columns[names[i]];
+                if (column == null) continue;
+                column.Width = widths[i]; column.MinimumWidth = Math.Min(widths[i], 45);
+            }
+            if (_history.Columns["Observações"] != null) { _history.Columns["Observações"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; _history.Columns["Observações"].MinimumWidth = 90; }
         }
 
         private void Open()
