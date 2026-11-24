@@ -81,6 +81,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, action TEXT NOT N
                 EnsureColumn(connection, "products", "shelf_location", "TEXT");
                 EnsureColumn(connection, "work_order_items", "product_id", "INTEGER");
                 EnsureColumn(connection, "sales", "cash_session_id", "INTEGER");
+                EnsureColumn(connection, "cash_sessions", "opened_by", "TEXT");
+                EnsureColumn(connection, "cash_sessions", "closing_notes", "TEXT");
+                EnsureColumn(connection, "cash_movements", "category", "TEXT");
                 EnsureColumn(connection, "financial_entries", "sale_id", "INTEGER");
                 EnsureColumn(connection, "financial_entries", "supplier_id", "INTEGER");
                 EnsureColumn(connection, "financial_entries", "debtor_id", "INTEGER");
@@ -813,22 +816,56 @@ FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id INNER JO
         }
 
         public DataTable GetOpenCash() { return Query("SELECT * FROM cash_sessions WHERE status='Aberto' ORDER BY id DESC LIMIT 1;"); }
-        public DataTable GetCashMovements(long cashId) { return Query("SELECT id AS 'Código', movement_type AS 'Tipo', COALESCE(payment_method,'') AS 'Pagamento', printf('R$ %.2f', amount) AS 'Valor', description AS 'Descrição', substr(created_at,1,19) AS 'Data' FROM cash_movements WHERE cash_session_id=" + cashId + " ORDER BY id DESC;"); }
-        public long OpenCash(decimal openingBalance)
-        { RequirePermission("cash.open"); 
+        public DataTable GetCashMovements(long cashId)
+        {
+            return Query("SELECT id AS 'Código', substr(created_at,1,16) AS 'Hora', movement_type AS 'Tipo', COALESCE(payment_method,'') AS 'Forma', COALESCE(category,'') AS 'Categoria', COALESCE(description,'') AS 'Descrição', CASE WHEN amount>0 THEN printf('R$ %.2f',amount) ELSE '—' END AS 'Entrada', CASE WHEN amount<0 THEN printf('R$ %.2f',-amount) ELSE '—' END AS 'Saída' FROM cash_movements WHERE cash_session_id=" + cashId + " ORDER BY id DESC;");
+        }
+        public DataTable GetCashSummary(long cashId)
+        {
+            return Query("SELECT opening_balance, COALESCE((SELECT SUM(amount) FROM cash_movements WHERE cash_session_id=" + cashId + " AND amount>0),0) AS entries, COALESCE((SELECT SUM(-amount) FROM cash_movements WHERE cash_session_id=" + cashId + " AND amount<0),0) AS exits, opening_balance + COALESCE((SELECT SUM(amount) FROM cash_movements WHERE cash_session_id=" + cashId + " AND payment_method='Dinheiro'),0) AS expected FROM cash_sessions WHERE id=" + cashId + ";");
+        }
+        public DataTable GetCashHistory()
+        {
+            return Query("SELECT COALESCE(opened_by,'—') AS 'Operador', substr(opened_at,1,16) AS 'Abertura', COALESCE(substr(closed_at,1,16),'—') AS 'Fechamento', status AS 'Status', printf('R$ %.2f',opening_balance) AS 'Saldo inicial', printf('R$ %.2f',opening_balance + COALESCE((SELECT SUM(amount) FROM cash_movements m WHERE m.cash_session_id=s.id AND payment_method='Dinheiro'),0)) AS 'Esperado', CASE WHEN counted_balance IS NULL THEN '—' ELSE printf('R$ %.2f',counted_balance) END AS 'Contado', CASE WHEN difference IS NULL THEN '—' ELSE printf('R$ %.2f',difference) END AS 'Diferença', COALESCE(closing_notes,'') AS 'Observações' FROM cash_sessions s ORDER BY id DESC LIMIT 20;");
+        }
+        public long OpenCash(decimal openingBalance) { return OpenCash(openingBalance, "Sistema"); }
+        public long OpenCash(decimal openingBalance, string openedBy)
+        {
+            RequirePermission("cash.open");
             long id;
             using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
-            using (var command = new SQLiteCommand("INSERT INTO cash_sessions (opened_at,opening_balance,status) VALUES (@opened,@balance,'Aberto'); SELECT last_insert_rowid();",connection))
+            using (var command = new SQLiteCommand("INSERT INTO cash_sessions (opened_at,opening_balance,status,opened_by) VALUES (@opened,@balance,'Aberto',@operator); SELECT last_insert_rowid();",connection))
             {
-                connection.Open(); command.Parameters.AddWithValue("@opened",DateTime.UtcNow.ToString("o")); command.Parameters.AddWithValue("@balance",openingBalance);
+                connection.Open(); command.Parameters.AddWithValue("@opened",DateTime.UtcNow.ToString("o")); command.Parameters.AddWithValue("@balance",openingBalance); command.Parameters.AddWithValue("@operator",string.IsNullOrWhiteSpace(openedBy) ? "Sistema" : openedBy);
                 id=Convert.ToInt64(command.ExecuteScalar());
             }
             AddAudit("cash_opened",id.ToString());
             return id;
         }
-        public void AddCashMovement(long cashId, string type, string payment, decimal amount, string description) { using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;")) using (var command = new SQLiteCommand("INSERT INTO cash_movements (cash_session_id,movement_type,payment_method,amount,description,created_at) VALUES (@cash,@type,@payment,@amount,@description,@created)",connection)) { connection.Open(); command.Parameters.AddWithValue("@cash",cashId);command.Parameters.AddWithValue("@type",type);command.Parameters.AddWithValue("@payment",payment);command.Parameters.AddWithValue("@amount",amount);command.Parameters.AddWithValue("@description",description);command.Parameters.AddWithValue("@created",DateTime.UtcNow.ToString("o"));command.ExecuteNonQuery(); } AddAudit("cash_movement",type); }
+        public void AddCashMovement(long cashId, string type, string payment, decimal amount, string description) { AddCashMovement(cashId,type,payment,amount,description,""); }
+        public void AddCashMovement(long cashId, string type, string payment, decimal amount, string description, string category)
+        {
+            RequirePermission("cash.movement");
+            using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
+            using (var command = new SQLiteCommand("INSERT INTO cash_movements (cash_session_id,movement_type,payment_method,amount,description,created_at,category) VALUES (@cash,@type,@payment,@amount,@description,@created,@category)",connection))
+            {
+                connection.Open(); command.Parameters.AddWithValue("@cash",cashId); command.Parameters.AddWithValue("@type",type); command.Parameters.AddWithValue("@payment",payment); command.Parameters.AddWithValue("@amount",amount); command.Parameters.AddWithValue("@description",description); command.Parameters.AddWithValue("@created",DateTime.UtcNow.ToString("o")); command.Parameters.AddWithValue("@category",string.IsNullOrWhiteSpace(category)?(object)DBNull.Value:category); command.ExecuteNonQuery();
+            }
+            AddAudit("cash_movement",type + " • " + (category ?? ""));
+        }
         public decimal GetCashExpected(long cashId) { using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;")) using (var command = new SQLiteCommand("SELECT opening_balance + COALESCE((SELECT SUM(amount) FROM cash_movements WHERE cash_session_id=@id AND payment_method='Dinheiro'),0) FROM cash_sessions WHERE id=@id",connection)) { connection.Open(); command.Parameters.AddWithValue("@id",cashId); return Convert.ToDecimal(command.ExecuteScalar()); } }
-        public void CloseCash(long cashId, decimal counted) { RequirePermission("cash.close");  var expected=GetCashExpected(cashId); using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;")) using (var command = new SQLiteCommand("UPDATE cash_sessions SET status='Fechado',closed_at=@closed,counted_balance=@counted,difference=@difference WHERE id=@id",connection)) { connection.Open();command.Parameters.AddWithValue("@closed",DateTime.UtcNow.ToString("o"));command.Parameters.AddWithValue("@counted",counted);command.Parameters.AddWithValue("@difference",counted-expected);command.Parameters.AddWithValue("@id",cashId);command.ExecuteNonQuery(); } AddAudit("cash_closed",cashId.ToString()); }
+        public void CloseCash(long cashId, decimal counted) { CloseCash(cashId,counted,""); }
+        public void CloseCash(long cashId, decimal counted, string notes)
+        {
+            RequirePermission("cash.close");
+            var expected=GetCashExpected(cashId);
+            using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
+            using (var command = new SQLiteCommand("UPDATE cash_sessions SET status='Fechado',closed_at=@closed,counted_balance=@counted,difference=@difference,closing_notes=@notes WHERE id=@id",connection))
+            {
+                connection.Open(); command.Parameters.AddWithValue("@closed",DateTime.UtcNow.ToString("o")); command.Parameters.AddWithValue("@counted",counted); command.Parameters.AddWithValue("@difference",counted-expected); command.Parameters.AddWithValue("@notes",string.IsNullOrWhiteSpace(notes)?(object)DBNull.Value:notes); command.Parameters.AddWithValue("@id",cashId); command.ExecuteNonQuery();
+            }
+            AddAudit("cash_closed",cashId.ToString());
+        }
 
         public DataTable GetFinancialEntries()
         {
