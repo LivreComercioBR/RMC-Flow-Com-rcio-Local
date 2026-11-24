@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, action TEXT NOT N
                 EnsureColumn(connection, "financial_entries", "sale_id", "INTEGER");
                 EnsureColumn(connection, "financial_entries", "supplier_id", "INTEGER");
                 EnsureColumn(connection, "financial_entries", "debtor_id", "INTEGER");
+                EnsureColumn(connection, "debtors", "client_id", "INTEGER");
                 EnsureColumn(connection, "financial_entries", "purchase_id", "INTEGER");
                 EnsureColumn(connection, "financial_entries", "work_order_id", "INTEGER");
                 using (var repairNames = new SQLiteCommand(@"UPDATE financial_entries
@@ -100,6 +101,21 @@ due_date=COALESCE((SELECT date(sales.created_at,'+30 days') FROM sales WHERE sal
 WHERE origin='PDV' AND status='Pago' AND payment_method IN ('Boleto','Crediário')
 AND sale_id IN (SELECT id FROM sales WHERE payment_method IN ('Boleto','Crediário'))
 AND julianday(COALESCE(paid_at,'')) IS NOT NULL AND abs(julianday(paid_at)-julianday(created_at))*86400<120;", connection)) repairReceivables.ExecuteNonQuery();
+                using (var linkExistingDebtors = new SQLiteCommand(@"UPDATE debtors SET
+client_id=(SELECT clients.id FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document LIMIT 1),
+name=COALESCE((SELECT clients.name FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document LIMIT 1),name),
+phone=COALESCE((SELECT clients.phone FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document LIMIT 1),phone),
+email=COALESCE((SELECT clients.email FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document LIMIT 1),email),
+active=1
+WHERE client_id IS NULL AND COALESCE(document,'')<>'' AND EXISTS(SELECT 1 FROM clients JOIN sales ON sales.client_id=clients.id WHERE sales.is_deferred=1 AND clients.document=debtors.document);", connection)) linkExistingDebtors.ExecuteNonQuery();
+                using (var syncDebtors = new SQLiteCommand(@"INSERT INTO debtors (name,document,phone,email,active,client_id)
+SELECT DISTINCT clients.name, clients.document, clients.phone, clients.email, 1, clients.id
+FROM sales JOIN clients ON clients.id=sales.client_id
+WHERE sales.is_deferred=1 AND NOT EXISTS(SELECT 1 FROM debtors WHERE debtors.client_id=clients.id OR (COALESCE(clients.document,'')<>'' AND debtors.document=clients.document));", connection)) syncDebtors.ExecuteNonQuery();
+                using (var syncReceivables = new SQLiteCommand(@"UPDATE financial_entries
+SET debtor_id=(SELECT debtors.id FROM sales JOIN clients ON clients.id=sales.client_id JOIN debtors ON debtors.client_id=clients.id OR (debtors.client_id IS NULL AND COALESCE(clients.document,'')<>'' AND debtors.document=clients.document) WHERE sales.id=financial_entries.sale_id LIMIT 1)
+WHERE financial_entries.origin='PDV' AND financial_entries.debtor_id IS NULL
+AND EXISTS(SELECT 1 FROM sales JOIN clients ON clients.id=sales.client_id JOIN debtors ON debtors.client_id=clients.id OR (debtors.client_id IS NULL AND COALESCE(clients.document,'')<>'' AND debtors.document=clients.document) WHERE sales.id=financial_entries.sale_id);", connection)) syncReceivables.ExecuteNonQuery();
                 EnsureColumn(connection, "purchases", "status", "TEXT NOT NULL DEFAULT 'Finalizada'");
                 EnsureColumn(connection, "purchases", "cancellation_reason", "TEXT");
                 EnsureColumn(connection, "purchases", "cancelled_at", "TEXT");
@@ -1087,6 +1103,44 @@ ORDER BY 9, 2, 3;");
             AddAudit("financial_entry_cancelled", id.ToString());
         }
 
+        private long GetOrCreateClientDebtor(long clientId)
+        {
+            using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
+            {
+                connection.Open();
+                string name, document, phone, email;
+                using (var customer = new SQLiteCommand("SELECT name,COALESCE(document,''),COALESCE(phone,''),COALESCE(email,'') FROM clients WHERE id=@id", connection))
+                {
+                    customer.Parameters.AddWithValue("@id", clientId);
+                    using (var reader = customer.ExecuteReader())
+                    {
+                        if (!reader.Read()) throw new InvalidOperationException("O cliente selecionado não foi encontrado.");
+                        name = Convert.ToString(reader[0]); document = Convert.ToString(reader[1]); phone = Convert.ToString(reader[2]); email = Convert.ToString(reader[3]);
+                    }
+                }
+                long debtorId = 0;
+                using (var find = new SQLiteCommand("SELECT id FROM debtors WHERE client_id=@client OR (client_id IS NULL AND @document<>'' AND document=@document) ORDER BY CASE WHEN client_id=@client THEN 0 ELSE 1 END LIMIT 1", connection))
+                {
+                    find.Parameters.AddWithValue("@client", clientId); find.Parameters.AddWithValue("@document", document);
+                    var existing = find.ExecuteScalar(); if (existing != null && existing != DBNull.Value) debtorId = Convert.ToInt64(existing);
+                }
+                if (debtorId > 0)
+                {
+                    using (var update = new SQLiteCommand("UPDATE debtors SET client_id=@client,name=@name,document=@document,phone=@phone,email=@email,active=1 WHERE id=@id", connection))
+                    {
+                        update.Parameters.AddWithValue("@client", clientId); update.Parameters.AddWithValue("@name", name); update.Parameters.AddWithValue("@document", document);
+                        update.Parameters.AddWithValue("@phone", phone); update.Parameters.AddWithValue("@email", email); update.Parameters.AddWithValue("@id", debtorId); update.ExecuteNonQuery();
+                    }
+                    return debtorId;
+                }
+                using (var add = new SQLiteCommand("INSERT INTO debtors (name,document,phone,email,active,client_id) VALUES (@name,@document,@phone,@email,1,@client); SELECT last_insert_rowid();", connection))
+                {
+                    add.Parameters.AddWithValue("@name", name); add.Parameters.AddWithValue("@document", document); add.Parameters.AddWithValue("@phone", phone); add.Parameters.AddWithValue("@email", email); add.Parameters.AddWithValue("@client", clientId);
+                    return Convert.ToInt64(add.ExecuteScalar());
+                }
+            }
+        }
+
         public void SaveSale(string number, DataTable items, string paymentMethod, decimal discount, long? clientId)
         {
             var schedule = new DataTable();
@@ -1154,6 +1208,7 @@ ORDER BY 9, 2, 3;");
                     }
                 }
             }
+            long? debtorId = deferred && clientId.HasValue ? (long?)GetOrCreateClientDebtor(clientId.Value) : null;
             using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
             {
                 connection.Open();
@@ -1164,13 +1219,13 @@ ORDER BY 9, 2, 3;");
                     var dueDate = Convert.ToDateTime(installment["due_date"]).ToString("yyyy-MM-dd");
                     var amount = Convert.ToDecimal(installment["amount"]); var status = isPaid || !deferred ? "Pago" : "Pendente";
                     var description = "Venda " + number + (paymentSchedule.Rows.Count > 1 ? " • parcela " + (index + 1) + "/" + paymentSchedule.Rows.Count : "");
-                    using (var financial = new SQLiteCommand("INSERT INTO financial_entries (entry_type,party_name,description,document_number,amount,due_date,paid_at,payment_method,status,origin,sale_id,created_at) VALUES ('Receber',@party,@description,@document,@amount,@due,@paid,@payment,@status,'PDV',@sale,@created)", connection))
+                    using (var financial = new SQLiteCommand("INSERT INTO financial_entries (entry_type,party_name,description,document_number,amount,due_date,paid_at,payment_method,status,origin,sale_id,debtor_id,created_at) VALUES ('Receber',@party,@description,@document,@amount,@due,@paid,@payment,@status,'PDV',@sale,@debtor,@created)", connection))
                     {
                         financial.Parameters.AddWithValue("@party", clientName); financial.Parameters.AddWithValue("@description", description); financial.Parameters.AddWithValue("@document", number);
                         financial.Parameters.AddWithValue("@amount", amount); financial.Parameters.AddWithValue("@due", dueDate);
                         financial.Parameters.AddWithValue("@paid", status == "Pago" ? (object)DateTime.UtcNow.ToString("o") : DBNull.Value);
                         financial.Parameters.AddWithValue("@payment", method); financial.Parameters.AddWithValue("@status", status);
-                        financial.Parameters.AddWithValue("@sale", saleId); financial.Parameters.AddWithValue("@created", DateTime.UtcNow.ToString("o")); financial.ExecuteNonQuery();
+                        financial.Parameters.AddWithValue("@sale", saleId); financial.Parameters.AddWithValue("@debtor", debtorId.HasValue ? (object)debtorId.Value : DBNull.Value); financial.Parameters.AddWithValue("@created", DateTime.UtcNow.ToString("o")); financial.ExecuteNonQuery();
                     }
                 }
             }
@@ -1200,6 +1255,11 @@ ORDER BY 9, 2, 3;");
         {
             var value = (number ?? string.Empty).Replace("'", "''");
             return Query("SELECT sale_items.description, sale_items.quantity, sale_items.unit_price, sale_items.total FROM sale_items INNER JOIN sales ON sales.id=sale_items.sale_id WHERE sales.number='" + value + "' ORDER BY sale_items.id;");
+        }
+        public DataTable GetSaleInstallments(string number)
+        {
+            var value = (number ?? string.Empty).Replace("'", "''");
+            return Query("SELECT financial_entries.description, financial_entries.due_date, financial_entries.amount, financial_entries.status, COALESCE(financial_entries.payment_method,'') AS payment_method FROM financial_entries INNER JOIN sales ON sales.id=financial_entries.sale_id WHERE sales.number='" + value + "' AND financial_entries.origin='PDV' ORDER BY date(financial_entries.due_date), financial_entries.id;");
         }
 
         public DataTable GetPurchases()
