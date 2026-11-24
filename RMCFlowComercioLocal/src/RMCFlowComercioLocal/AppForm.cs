@@ -1402,6 +1402,14 @@ namespace RMCFlowComercioLocal
         {
             var panel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(12) };
             panel.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Location = new Point(12, 10) });
+            if (grid == _movements)
+            {
+                var report = new Button { Text = "Conferência por período", Size = new Size(175, 28), Anchor = AnchorStyles.Top | AnchorStyles.Right };
+                report.Click += (s, e) => { using (var form = new CashMovementsReportForm(_database)) form.ShowDialog(this); };
+                panel.Controls.Add(report);
+                panel.Resize += (s, e) => report.Location = new Point(Math.Max(180, panel.ClientSize.Width - report.Width - 12), 6);
+                report.Location = new Point(Math.Max(180, panel.ClientSize.Width - report.Width - 12), 6);
+            }
             grid.Location = new Point(12, 42); grid.Size = new Size(900, 90); grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             grid.ReadOnly = true; grid.AllowUserToAddRows = false; grid.AllowUserToDeleteRows = false; grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None; grid.BackgroundColor = Color.White; grid.RowHeadersVisible = false;
@@ -1488,6 +1496,140 @@ namespace RMCFlowComercioLocal
             _database.CloseCash(_cashId.Value, _counted.Value, _closingNotes.Text.Trim());
             MessageBox.Show("Caixa fechado. Diferença: " + difference.ToString("C2"), "Caixa", MessageBoxButtons.OK, MessageBoxIcon.Information);
             _counted.Value = 0; _closingNotes.Clear(); RefreshCash();
+        }
+    }
+
+    internal sealed class CashMovementsReportForm : Form
+    {
+        private readonly LocalDatabase _database;
+        private readonly ComboBox _period = new ComboBox();
+        private readonly DateTimePicker _from = new DateTimePicker();
+        private readonly DateTimePicker _to = new DateTimePicker();
+        private readonly DataGridView _grid = new DataGridView();
+        private readonly Label _summary = new Label();
+        private bool _loading;
+
+        public CashMovementsReportForm(LocalDatabase database)
+        {
+            _database = database; Text = "Conferência de movimentos do caixa"; StartPosition = FormStartPosition.CenterParent; Size = new Size(1120, 680); MinimumSize = new Size(860, 520);
+            Build(); ApplyPeriod();
+        }
+
+        private void Build()
+        {
+            Controls.Add(new Label { Text = "Período", Location = new Point(18, 18), AutoSize = true });
+            _period.DropDownStyle = ComboBoxStyle.DropDownList; _period.Items.AddRange(new object[] { "Hoje", "Semana atual", "Quinzena atual", "Mês atual", "Personalizado" }); _period.Location = new Point(18, 40); _period.Size = new Size(150, 24); _period.SelectedIndexChanged += (s, e) => ApplyPeriod(); Controls.Add(_period);
+            Controls.Add(new Label { Text = "De", Location = new Point(185, 18), AutoSize = true });
+            _from.Format = DateTimePickerFormat.Short; _from.Location = new Point(185, 40); _from.Size = new Size(125, 24); _from.ValueChanged += (s, e) => { if (!_loading) RefreshResults(); }; Controls.Add(_from);
+            Controls.Add(new Label { Text = "Até", Location = new Point(325, 18), AutoSize = true });
+            _to.Format = DateTimePickerFormat.Short; _to.Location = new Point(325, 40); _to.Size = new Size(125, 24); _to.ValueChanged += (s, e) => { if (!_loading) RefreshResults(); }; Controls.Add(_to);
+            var update = new Button { Text = "Atualizar", Location = new Point(465, 38), Size = new Size(100, 28) }; update.Click += (s, e) => RefreshResults(); Controls.Add(update);
+            _summary.Location = new Point(18, 78); _summary.AutoSize = true; _summary.Font = new Font("Segoe UI", 9, FontStyle.Bold); Controls.Add(_summary);
+            _grid.Location = new Point(18, 108); _grid.Size = new Size(1060, 510); _grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+            _grid.ReadOnly = true; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect; _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None; _grid.BackgroundColor = Color.White; _grid.RowHeadersVisible = false; Controls.Add(_grid);
+            _period.SelectedIndex = 0;
+        }
+
+        private void ApplyPeriod()
+        {
+            if (_period.SelectedItem == null) return;
+            var today = DateTime.Today; DateTime start = today, end = today;
+            switch (Convert.ToString(_period.SelectedItem))
+            {
+                case "Semana atual": start = today.AddDays(-((int)today.DayOfWeek + 6) % 7); end = start.AddDays(6); break;
+                case "Quinzena atual": start = today.Day <= 15 ? new DateTime(today.Year, today.Month, 1) : new DateTime(today.Year, today.Month, 16); end = today.Day <= 15 ? new DateTime(today.Year, today.Month, 15) : new DateTime(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month)); break;
+                case "Mês atual": start = new DateTime(today.Year, today.Month, 1); end = new DateTime(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month)); break;
+                case "Personalizado": RefreshResults(); return;
+            }
+            _loading = true; _from.Value = start; _to.Value = end; _loading = false; RefreshResults();
+        }
+
+        private void RefreshResults()
+        {
+            if (_from.Value.Date > _to.Value.Date) { _summary.Text = "A data inicial não pode ser posterior à data final."; _grid.DataSource = null; return; }
+            var data = _database.FindCashMovements(_from.Value.Date, _to.Value.Date); _grid.DataSource = data;
+            var widths = new[] { 55, 145, 120, 110, 95, 150, 100, 170, 95, 95 };
+            for (var i = 0; i < widths.Length && i < _grid.Columns.Count; i++) _grid.Columns[i].Width = widths[i];
+            if (_grid.Columns.Contains("Descrição")) { _grid.Columns["Descrição"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; _grid.Columns["Descrição"].MinimumWidth = 140; }
+            _summary.Text = "Movimentos encontrados: " + data.Rows.Count + " • " + _from.Value.ToString("dd/MM/yyyy") + " a " + _to.Value.ToString("dd/MM/yyyy") + ".";
+        }
+    }
+
+    internal sealed class PaymentScheduleForm : Form
+    {
+        private readonly decimal _total;
+        private readonly string _method;
+        private readonly NumericUpDown _count = new NumericUpDown();
+        private readonly NumericUpDown _interval = new NumericUpDown();
+        private readonly DateTimePicker _firstDue = new DateTimePicker();
+        private readonly CheckBox _entryPaid = new CheckBox();
+        private readonly ComboBox _entryMethod = new ComboBox();
+        private readonly DataGridView _grid = new DataGridView();
+        private DataTable _schedule = new DataTable();
+        public DataTable Schedule { get { _grid.EndEdit(); return _schedule.Copy(); } }
+
+        public PaymentScheduleForm(decimal total, string method)
+        {
+            _total = total; _method = method; Text = method == "Crédito" ? "Condições do cartão de crédito" : "Parcelas e vencimentos"; StartPosition = FormStartPosition.CenterParent; Size = new Size(680, 520); MinimumSize = new Size(600, 440); Build();
+        }
+
+        private void Build()
+        {
+            Controls.Add(new Label { Text = "Quantidade de parcelas", Location = new Point(18, 18), AutoSize = true });
+            _count.Minimum = 1; _count.Maximum = 36; _count.Value = 1; _count.Location = new Point(18, 40); _count.Size = new Size(90, 24); Controls.Add(_count);
+            Controls.Add(new Label { Text = "Primeiro vencimento", Location = new Point(125, 18), AutoSize = true });
+            _firstDue.Format = DateTimePickerFormat.Short; _firstDue.Location = new Point(125, 40); _firstDue.Size = new Size(130, 24); _firstDue.Value = _method == "Crédito" ? DateTime.Today : DateTime.Today.AddDays(30); Controls.Add(_firstDue);
+            Controls.Add(new Label { Text = "Intervalo padrão (dias)", Location = new Point(270, 18), AutoSize = true });
+            _interval.Minimum = 1; _interval.Maximum = 365; _interval.Value = 30; _interval.Location = new Point(270, 40); _interval.Size = new Size(90, 24); Controls.Add(_interval);
+            var generate = new Button { Text = "Gerar parcelas", Location = new Point(375, 38), Size = new Size(115, 28) }; generate.Click += (s, e) => GenerateSchedule(); Controls.Add(generate);
+            _entryPaid.Text = "1ª parcela recebida na venda"; _entryPaid.Location = new Point(18, 78); _entryPaid.AutoSize = true; _entryPaid.Checked = _method == "Crédito"; _entryPaid.CheckedChanged += (s, e) => UpdateFirstInstallment(); _count.ValueChanged += (s, e) => { if (_method == "Crédito") { var single = _count.Value == 1; _entryPaid.Checked = single; if (!single && _firstDue.Value.Date == DateTime.Today) _firstDue.Value = DateTime.Today.AddDays(30); else if (single && _firstDue.Value.Date == DateTime.Today.AddDays(30)) _firstDue.Value = DateTime.Today; } }; Controls.Add(_entryPaid);
+            Controls.Add(new Label { Text = "Forma da entrada recebida", Location = new Point(270, 76), AutoSize = true });
+            _entryMethod.DropDownStyle = ComboBoxStyle.DropDownList; _entryMethod.Items.AddRange(new object[] { "Dinheiro", "PIX", "Débito", "Crédito", "Transferência", "Boleto" }); _entryMethod.SelectedItem = _method == "Crédito" ? "Crédito" : "Dinheiro"; if (_entryMethod.SelectedIndex < 0) _entryMethod.SelectedIndex = 0; _entryMethod.Location = new Point(270, 98); _entryMethod.Size = new Size(150, 24); _entryMethod.SelectedIndexChanged += (s, e) => UpdateFirstInstallment(); Controls.Add(_entryMethod);
+            Controls.Add(new Label { Text = "Edite as datas e os valores para definir intervalos diferentes (ex.: 10, 20 e 40 dias).", Location = new Point(18, 132), AutoSize = true });
+            _grid.Location = new Point(18, 158); _grid.Size = new Size(625, 260); _grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _grid.BackgroundColor = Color.White; _grid.RowHeadersVisible = false; Controls.Add(_grid);
+            var cancel = new Button { Text = "Cancelar", Location = new Point(425, 438), Size = new Size(100, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; cancel.DialogResult = DialogResult.Cancel; Controls.Add(cancel);
+            var save = new Button { Text = "Confirmar parcelas", Location = new Point(535, 438), Size = new Size(110, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; save.Click += (s, e) => ConfirmSchedule(); Controls.Add(save);
+            AcceptButton = save; CancelButton = cancel; GenerateSchedule();
+        }
+
+        private void GenerateSchedule()
+        {
+            _schedule = new DataTable(); _schedule.Columns.Add("due_date", typeof(DateTime)); _schedule.Columns.Add("amount", typeof(decimal)); _schedule.Columns.Add("is_paid", typeof(bool)); _schedule.Columns.Add("payment_method", typeof(string));
+            var count = Convert.ToInt32(_count.Value); var each = Math.Round(_total / count, 2, MidpointRounding.AwayFromZero); decimal assigned = 0;
+            for (var i = 0; i < count; i++)
+            {
+                var amount = i == count - 1 ? _total - assigned : each; assigned += amount;
+                var due = _firstDue.Value.Date.AddDays(Convert.ToInt32(_interval.Value) * i);
+                var paid = _entryPaid.Checked && i == 0;
+                _schedule.Rows.Add(due, amount, paid, paid ? Convert.ToString(_entryMethod.SelectedItem) : _method);
+            }
+            _grid.DataSource = _schedule;
+            _grid.Columns["due_date"].HeaderText = "Vencimento"; _grid.Columns["due_date"].DefaultCellStyle.Format = "dd/MM/yyyy";
+            _grid.Columns["amount"].HeaderText = "Valor (R$)"; _grid.Columns["amount"].DefaultCellStyle.Format = "N2";
+            _grid.Columns["is_paid"].HeaderText = "Recebida na venda"; _grid.Columns["is_paid"].Width = 120; _grid.Columns["is_paid"].ReadOnly = true;
+            _grid.Columns["payment_method"].Visible = false;
+        }
+
+        private void UpdateFirstInstallment()
+        {
+            if (_schedule.Rows.Count == 0) return;
+            _schedule.Rows[0]["is_paid"] = _entryPaid.Checked;
+            _schedule.Rows[0]["payment_method"] = _entryPaid.Checked ? Convert.ToString(_entryMethod.SelectedItem) : _method;
+        }
+
+        private void ConfirmSchedule()
+        {
+            _grid.EndEdit();
+            decimal total = 0;
+            foreach (DataRow row in _schedule.Rows)
+            {
+                DateTime due; decimal amount;
+                if (!DateTime.TryParse(Convert.ToString(row["due_date"]), out due) || !decimal.TryParse(Convert.ToString(row["amount"]), out amount) || amount <= 0)
+                { MessageBox.Show("Confira as datas e informe valores de parcela maiores que zero."); return; }
+                total += amount;
+            }
+            if (Math.Abs(total - _total) > 0.01M) { MessageBox.Show("A soma das parcelas (" + total.ToString("C2") + ") precisa ser igual ao total da venda (" + _total.ToString("C2") + ")."); return; }
+            DialogResult = DialogResult.OK; Close();
         }
     }
 
@@ -1735,7 +1877,54 @@ namespace RMCFlowComercioLocal
         private void LoadClients() { _client.DataSource = _database.GetSaleClientLookup(); _client.DisplayMember = "name"; _client.ValueMember = "id"; }
         private void NewClient() { using (var form = new ClientEditor(_database, null)) { if (form.ShowDialog(this) == DialogResult.OK) LoadClients(); } }
         private void SearchClient() { using (var form = new ClientSearchForm(_database)) { if (form.ShowDialog(this) == DialogResult.OK) { LoadClients(); _client.SelectedValue = form.SelectedId; } } }
-        private void Finish(object sender, EventArgs e) { if (_items.Rows.Count==0) { MessageBox.Show("Inclua ao menos um produto no carrinho."); return; } long? clientId = null; if (_client.SelectedValue != null && Convert.ToInt64(_client.SelectedValue) > 0) clientId = Convert.ToInt64(_client.SelectedValue); var number=_database.NextSaleNumber(); try { _database.SaveSale(number,_items,_payment.Text,_discount.Value,clientId); } catch(Exception ex) { MessageBox.Show(ex.Message); return; } MessageBox.Show("Venda " + number + " finalizada com sucesso."); using(var receipt=new SaleReceiptForm(_database,number)) receipt.ShowDialog(this); DialogResult=DialogResult.OK; }
+        private void Finish(object sender, EventArgs e)
+        {
+            if (_items.Rows.Count == 0) { MessageBox.Show("Inclua ao menos um produto no carrinho."); return; }
+            long? clientId = null;
+            if (_client.SelectedValue != null && Convert.ToInt64(_client.SelectedValue) > 0) clientId = Convert.ToInt64(_client.SelectedValue);
+            decimal subtotal = 0; foreach (DataRow item in _items.Rows) subtotal += Convert.ToDecimal(item["quantity"]) * Convert.ToDecimal(item["unit_price"]);
+            var total = Math.Max(0, subtotal - _discount.Value);
+            var method = Convert.ToString(_payment.SelectedItem);
+            DataTable schedule = new DataTable();
+            schedule.Columns.Add("due_date", typeof(string)); schedule.Columns.Add("amount", typeof(decimal)); schedule.Columns.Add("is_paid", typeof(bool)); schedule.Columns.Add("payment_method", typeof(string));
+            bool deferred = method == "Boleto" || method == "Crediário";
+            if ((method == "Boleto" || method == "Crediário") && !clientId.HasValue)
+            {
+                MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas à conta correta.");
+                return;
+            }
+            if (method == "Boleto" || method == "Crediário" || method == "Crédito")
+            {
+                using (var form = new PaymentScheduleForm(total, method))
+                {
+                    if (form.ShowDialog(this) != DialogResult.OK) return;
+                    schedule = form.Schedule;
+                }
+                if (schedule.Rows.Count == 0) return;
+                if (method == "Crédito")
+                {
+                    deferred = schedule.Rows.Count > 1 || !Convert.ToBoolean(schedule.Rows[0]["is_paid"]);
+                    if (deferred && !clientId.HasValue)
+                    {
+                        MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas do cartão.");
+                        return;
+                    }
+                }
+            }
+            else
+            {
+                schedule.Rows.Add(DateTime.Now.ToString("yyyy-MM-dd"), total, true, method);
+            }
+            var saleMethod = method;
+            if ((method == "Boleto" || method == "Crediário" || method == "Crédito") && schedule.Rows.Count > 1)
+                saleMethod += " (" + schedule.Rows.Count + "x)";
+            var number = _database.NextSaleNumber();
+            try { _database.SaveSale(number, _items, saleMethod, _discount.Value, clientId, schedule, deferred); }
+            catch (Exception ex) { MessageBox.Show(ex.Message); return; }
+            MessageBox.Show("Venda " + number + " finalizada com sucesso.");
+            using (var receipt = new SaleReceiptForm(_database, number)) receipt.ShowDialog(this);
+            DialogResult = DialogResult.OK;
+        }
     }
 
     internal sealed class ClientSearchForm : Form

@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, action TEXT NOT N
                 EnsureColumn(connection, "products", "shelf_location", "TEXT");
                 EnsureColumn(connection, "work_order_items", "product_id", "INTEGER");
                 EnsureColumn(connection, "sales", "cash_session_id", "INTEGER");
+                EnsureColumn(connection, "sales", "is_deferred", "INTEGER NOT NULL DEFAULT 0");
+                EnsureColumn(connection, "sales", "installment_count", "INTEGER NOT NULL DEFAULT 1");
                 EnsureColumn(connection, "cash_sessions", "opened_by", "TEXT");
                 EnsureColumn(connection, "cash_sessions", "closing_notes", "TEXT");
                 EnsureColumn(connection, "cash_movements", "category", "TEXT");
@@ -89,6 +91,15 @@ CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, action TEXT NOT N
                 EnsureColumn(connection, "financial_entries", "debtor_id", "INTEGER");
                 EnsureColumn(connection, "financial_entries", "purchase_id", "INTEGER");
                 EnsureColumn(connection, "financial_entries", "work_order_id", "INTEGER");
+                using (var repairNames = new SQLiteCommand(@"UPDATE financial_entries
+SET party_name=(SELECT clients.name FROM sales JOIN clients ON clients.id=sales.client_id WHERE sales.id=financial_entries.sale_id)
+WHERE origin='PDV' AND (party_name IS NULL OR trim(party_name)='') AND EXISTS(SELECT 1 FROM sales JOIN clients ON clients.id=sales.client_id WHERE sales.id=financial_entries.sale_id);", connection)) repairNames.ExecuteNonQuery();
+                using (var repairDeferredSales = new SQLiteCommand("UPDATE sales SET is_deferred=1 WHERE payment_method IN ('Boleto','Crediário') AND is_deferred=0;", connection)) repairDeferredSales.ExecuteNonQuery();
+                using (var repairReceivables = new SQLiteCommand(@"UPDATE financial_entries SET status='Pendente', paid_at=NULL,
+due_date=COALESCE((SELECT date(sales.created_at,'+30 days') FROM sales WHERE sales.id=financial_entries.sale_id),due_date)
+WHERE origin='PDV' AND status='Pago' AND payment_method IN ('Boleto','Crediário')
+AND sale_id IN (SELECT id FROM sales WHERE payment_method IN ('Boleto','Crediário'))
+AND julianday(COALESCE(paid_at,'')) IS NOT NULL AND abs(julianday(paid_at)-julianday(created_at))*86400<120;", connection)) repairReceivables.ExecuteNonQuery();
                 EnsureColumn(connection, "purchases", "status", "TEXT NOT NULL DEFAULT 'Finalizada'");
                 EnsureColumn(connection, "purchases", "cancellation_reason", "TEXT");
                 EnsureColumn(connection, "purchases", "cancelled_at", "TEXT");
@@ -818,11 +829,15 @@ FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id INNER JO
         public DataTable GetOpenCash() { return Query("SELECT * FROM cash_sessions WHERE status='Aberto' ORDER BY id DESC LIMIT 1;"); }
         public DataTable GetCashMovements(long cashId)
         {
-            return Query("SELECT id AS 'Código', substr(created_at,1,16) AS 'Hora', movement_type AS 'Tipo', COALESCE(payment_method,'') AS 'Forma', COALESCE(category,'') AS 'Categoria', COALESCE(description,'') AS 'Descrição', CASE WHEN amount>0 THEN printf('R$ %.2f',amount) ELSE '—' END AS 'Entrada', CASE WHEN amount<0 THEN printf('R$ %.2f',-amount) ELSE '—' END AS 'Saída' FROM cash_movements WHERE cash_session_id=" + cashId + " ORDER BY id DESC;");
+            return Query("SELECT id AS 'Código', substr(created_at,1,16) AS 'Hora', CASE WHEN movement_type='Venda PDV' AND EXISTS(SELECT 1 FROM sales s WHERE s.is_deferred=1 AND instr(cash_movements.description,s.number)>0) THEN 'Venda a prazo' ELSE movement_type END AS 'Tipo', COALESCE(payment_method,'') AS 'Forma', COALESCE(category,'') AS 'Categoria', COALESCE(description,'') AS 'Descrição', CASE WHEN amount>0 AND NOT (movement_type='Venda PDV' AND EXISTS(SELECT 1 FROM sales s WHERE s.is_deferred=1 AND instr(cash_movements.description,s.number)>0)) THEN printf('R$ %.2f',amount) ELSE '—' END AS 'Entrada', CASE WHEN amount<0 THEN printf('R$ %.2f',-amount) ELSE '—' END AS 'Saída' FROM cash_movements WHERE cash_session_id=" + cashId + " ORDER BY id DESC;");
+        }
+        public DataTable FindCashMovements(DateTime start, DateTime end)
+        {
+            return Query("SELECT cm.id AS 'Código', substr(cm.created_at,1,19) AS 'Data e hora', COALESCE(NULLIF(cs.opened_by,''),'Não registrado') AS 'Operador do caixa', CASE WHEN cm.movement_type='Venda PDV' AND s.is_deferred=1 THEN 'Venda a prazo' ELSE cm.movement_type END AS 'Tipo', COALESCE(cm.payment_method,'') AS 'Forma', COALESCE(c.name,'') AS 'Cliente', COALESCE(cm.category,'') AS 'Categoria', COALESCE(cm.description,'') AS 'Descrição', CASE WHEN cm.amount>0 AND NOT (cm.movement_type='Venda PDV' AND COALESCE(s.is_deferred,0)=1) THEN printf('R$ %.2f',cm.amount) ELSE '—' END AS 'Entrada', CASE WHEN cm.amount<0 THEN printf('R$ %.2f',-cm.amount) ELSE '—' END AS 'Saída' FROM cash_movements cm LEFT JOIN cash_sessions cs ON cs.id=cm.cash_session_id LEFT JOIN sales s ON instr(cm.description,s.number)>0 LEFT JOIN clients c ON c.id=s.client_id WHERE date(cm.created_at)>=date('" + start.ToString("yyyy-MM-dd") + "') AND date(cm.created_at)<=date('" + end.ToString("yyyy-MM-dd") + "') ORDER BY cm.created_at DESC, cm.id DESC;");
         }
         public DataTable GetCashSummary(long cashId)
         {
-            return Query("SELECT opening_balance, COALESCE((SELECT SUM(amount) FROM cash_movements WHERE cash_session_id=" + cashId + " AND amount>0),0) AS entries, COALESCE((SELECT SUM(-amount) FROM cash_movements WHERE cash_session_id=" + cashId + " AND amount<0),0) AS exits, opening_balance + COALESCE((SELECT SUM(amount) FROM cash_movements WHERE cash_session_id=" + cashId + " AND payment_method='Dinheiro'),0) AS expected FROM cash_sessions WHERE id=" + cashId + ";");
+            return Query("SELECT opening_balance, COALESCE((SELECT SUM(cm.amount) FROM cash_movements cm WHERE cm.cash_session_id=" + cashId + " AND cm.amount>0 AND NOT (cm.movement_type='Venda PDV' AND EXISTS(SELECT 1 FROM sales s WHERE s.is_deferred=1 AND instr(cm.description,s.number)>0))),0) AS entries, COALESCE((SELECT SUM(-amount) FROM cash_movements WHERE cash_session_id=" + cashId + " AND amount<0),0) AS exits, opening_balance + COALESCE((SELECT SUM(amount) FROM cash_movements WHERE cash_session_id=" + cashId + " AND payment_method='Dinheiro' AND NOT (movement_type='Venda PDV' AND EXISTS(SELECT 1 FROM sales s WHERE s.is_deferred=1 AND instr(cash_movements.description,s.number)>0))),0) AS expected FROM cash_sessions WHERE id=" + cashId + ";");
         }
         public DataTable GetCashHistory()
         {
@@ -884,20 +899,20 @@ FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id INNER JO
         {
             var value = (search ?? string.Empty).Replace("'", "''");
             var clause = string.Empty;
-            if (statusFilter == "Vencido") clause = " AND status='Pendente' AND date(due_date) < date('now','localtime')";
-            else if (statusFilter == "Pendente" || statusFilter == "Pago" || statusFilter == "Cancelado") clause = " AND status='" + statusFilter + "'";
-            return Query("SELECT id AS 'Código', entry_type AS 'Tipo', COALESCE(party_name,'') AS 'Cliente / fornecedor', COALESCE(due_date,'') AS 'Vencimento', CASE WHEN status='Pendente' AND date(due_date) < date('now','localtime') THEN 'Vencido' ELSE status END AS 'Status', printf('R$ %.2f', amount) AS 'Valor', COALESCE(category,'') AS 'Categoria', description AS 'Descrição', COALESCE(document_number,'') AS 'Documento', COALESCE(payment_method,'') AS 'Pagamento', COALESCE(origin,'Manual') AS 'Origem' FROM financial_entries WHERE (COALESCE(party_name,'') LIKE '%" + value + "%' OR COALESCE(description,'') LIKE '%" + value + "%' OR COALESCE(document_number,'') LIKE '%" + value + "%' OR COALESCE(category,'') LIKE '%" + value + "%')" + clause + " ORDER BY CASE WHEN status='Pendente' THEN 0 ELSE 1 END, due_date, id DESC;");
+            if (statusFilter == "Vencido") clause = " AND financial_entries.status='Pendente' AND date(due_date) < date('now','localtime')";
+            else if (statusFilter == "Pendente" || statusFilter == "Pago" || statusFilter == "Cancelado") clause = " AND financial_entries.status='" + statusFilter + "'";
+            return Query("SELECT financial_entries.id AS 'Código', financial_entries.entry_type AS 'Tipo', COALESCE(NULLIF(financial_entries.party_name,''),clients.name,debtors.name,suppliers.name,'') AS 'Cliente / fornecedor', COALESCE(financial_entries.due_date,'') AS 'Vencimento', CASE WHEN financial_entries.status='Pendente' AND date(financial_entries.due_date) < date('now','localtime') THEN 'Vencido' ELSE financial_entries.status END AS 'Status', printf('R$ %.2f', financial_entries.amount) AS 'Valor', COALESCE(financial_entries.category,'') AS 'Categoria', financial_entries.description AS 'Descrição', COALESCE(financial_entries.document_number,'') AS 'Documento', COALESCE(financial_entries.payment_method,'') AS 'Pagamento', COALESCE(financial_entries.origin,'Manual') AS 'Origem' FROM financial_entries LEFT JOIN sales ON sales.id=financial_entries.sale_id LEFT JOIN clients ON clients.id=sales.client_id LEFT JOIN debtors ON debtors.id=financial_entries.debtor_id LEFT JOIN suppliers ON suppliers.id=financial_entries.supplier_id WHERE (COALESCE(NULLIF(financial_entries.party_name,''),clients.name,debtors.name,suppliers.name,'') LIKE '%" + value + "%' OR financial_entries.description LIKE '%" + value + "%' OR COALESCE(financial_entries.document_number,'') LIKE '%" + value + "%' OR COALESCE(financial_entries.category,'') LIKE '%" + value + "%')" + clause + " ORDER BY CASE WHEN financial_entries.status='Pendente' THEN 0 ELSE 1 END, financial_entries.due_date, financial_entries.id DESC;");
         }
 
         public DataTable FindFinancialEntriesByType(string type, string statusFilter, string search, DateTime? start, DateTime? end)
         {
             var value = (search ?? string.Empty).Replace("'", "''");
             var clause = string.Empty;
-            if (statusFilter == "Vencido") clause += " AND status='Pendente' AND date(due_date) < date('now','localtime')";
-            else if (statusFilter == "Pendente" || statusFilter == "Pago" || statusFilter == "Cancelado") clause += " AND status='" + statusFilter + "'";
+            if (statusFilter == "Vencido") clause += " AND financial_entries.status='Pendente' AND date(due_date) < date('now','localtime')";
+            else if (statusFilter == "Pendente" || statusFilter == "Pago" || statusFilter == "Cancelado") clause += " AND financial_entries.status='" + statusFilter + "'";
             if (start.HasValue) clause += " AND date(due_date)>='" + start.Value.ToString("yyyy-MM-dd") + "'";
             if (end.HasValue) clause += " AND date(due_date)<='" + end.Value.ToString("yyyy-MM-dd") + "'";
-            return Query("SELECT id AS 'Código', entry_type AS 'Tipo', COALESCE(party_name,'') AS 'Cliente / fornecedor', COALESCE(due_date,'') AS 'Vencimento', CASE WHEN status='Pendente' AND date(due_date) < date('now','localtime') THEN 'Vencido' ELSE status END AS 'Status', printf('R$ %.2f', amount) AS 'Valor', COALESCE(category,'') AS 'Categoria', description AS 'Descrição', COALESCE(document_number,'') AS 'Documento', COALESCE(payment_method,'') AS 'Pagamento', COALESCE(origin,'Manual') AS 'Origem' FROM financial_entries WHERE entry_type='" + type + "' AND (COALESCE(party_name,'') LIKE '%" + value + "%' OR COALESCE(description,'') LIKE '%" + value + "%' OR COALESCE(document_number,'') LIKE '%" + value + "%' OR COALESCE(category,'') LIKE '%" + value + "%')" + clause + " ORDER BY CASE WHEN status='Pendente' THEN 0 ELSE 1 END, due_date, id DESC;");
+            return Query("SELECT financial_entries.id AS 'Código', financial_entries.entry_type AS 'Tipo', COALESCE(NULLIF(financial_entries.party_name,''),clients.name,debtors.name,suppliers.name,'') AS 'Cliente / fornecedor', COALESCE(financial_entries.due_date,'') AS 'Vencimento', CASE WHEN financial_entries.status='Pendente' AND date(financial_entries.due_date) < date('now','localtime') THEN 'Vencido' ELSE financial_entries.status END AS 'Status', printf('R$ %.2f', financial_entries.amount) AS 'Valor', COALESCE(financial_entries.category,'') AS 'Categoria', financial_entries.description AS 'Descrição', COALESCE(financial_entries.document_number,'') AS 'Documento', COALESCE(financial_entries.payment_method,'') AS 'Pagamento', COALESCE(financial_entries.origin,'Manual') AS 'Origem' FROM financial_entries LEFT JOIN sales ON sales.id=financial_entries.sale_id LEFT JOIN clients ON clients.id=sales.client_id LEFT JOIN debtors ON debtors.id=financial_entries.debtor_id LEFT JOIN suppliers ON suppliers.id=financial_entries.supplier_id WHERE financial_entries.entry_type='" + type + "' AND (COALESCE(NULLIF(financial_entries.party_name,''),clients.name,debtors.name,suppliers.name,'') LIKE '%" + value + "%' OR financial_entries.description LIKE '%" + value + "%' OR COALESCE(financial_entries.document_number,'') LIKE '%" + value + "%' OR COALESCE(financial_entries.category,'') LIKE '%" + value + "%')" + clause + " ORDER BY CASE WHEN financial_entries.status='Pendente' THEN 0 ELSE 1 END, financial_entries.due_date, financial_entries.id DESC;");
         }
 
         public DataTable GetFinancialAccountSummary(string type, DateTime? start, DateTime? end)
@@ -1073,16 +1088,92 @@ ORDER BY 9, 2, 3;");
         }
 
         public void SaveSale(string number, DataTable items, string paymentMethod, decimal discount, long? clientId)
-        { RequirePermission("sales.create"); 
-            var open = GetOpenCash(); if (open.Rows.Count == 0) throw new InvalidOperationException("Abra o caixa antes de finalizar uma venda."); var cashId=Convert.ToInt64(open.Rows[0]["id"]);
-            decimal subtotal = 0; foreach (DataRow item in items.Rows) subtotal += Convert.ToDecimal(item["quantity"]) * Convert.ToDecimal(item["unit_price"]); var total = Math.Max(0, subtotal - discount); long saleId;
+        {
+            var schedule = new DataTable();
+            schedule.Columns.Add("due_date", typeof(string)); schedule.Columns.Add("amount", typeof(decimal)); schedule.Columns.Add("is_paid", typeof(bool)); schedule.Columns.Add("payment_method", typeof(string));
+            decimal subtotal = 0; foreach (DataRow item in items.Rows) subtotal += Convert.ToDecimal(item["quantity"]) * Convert.ToDecimal(item["unit_price"]); decimal total = Math.Max(0, subtotal - discount);
+            var deferred = paymentMethod == "Boleto" || paymentMethod == "Crediário";
+            schedule.Rows.Add(DateTime.Today.AddDays(deferred ? 30 : 0).ToString("yyyy-MM-dd"), total, !deferred, paymentMethod);
+            SaveSale(number, items, paymentMethod, discount, clientId, schedule, deferred);
+        }
+
+        public void SaveSale(string number, DataTable items, string paymentMethod, decimal discount, long? clientId, DataTable paymentSchedule, bool deferred)
+        {
+            RequirePermission("sales.create");
+            var open = GetOpenCash(); if (open.Rows.Count == 0) throw new InvalidOperationException("Abra o caixa antes de finalizar uma venda.");
+            var cashId = Convert.ToInt64(open.Rows[0]["id"]);
+            decimal subtotal = 0; foreach (DataRow item in items.Rows) subtotal += Convert.ToDecimal(item["quantity"]) * Convert.ToDecimal(item["unit_price"]);
+            var total = Math.Max(0, subtotal - discount); long saleId;
+            if (paymentSchedule == null || paymentSchedule.Rows.Count == 0) throw new InvalidOperationException("Defina as parcelas e os vencimentos da venda.");
+            decimal scheduledTotal = 0; foreach (DataRow installment in paymentSchedule.Rows) scheduledTotal += Convert.ToDecimal(installment["amount"]);
+            if (Math.Abs(scheduledTotal - total) > 0.01M) throw new InvalidOperationException("A soma das parcelas precisa ser igual ao total da venda.");
+            string clientName = "Consumidor não identificado";
+            if (clientId.HasValue)
+            {
+                using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
+                using (var command = new SQLiteCommand("SELECT name FROM clients WHERE id=@id", connection))
+                { connection.Open(); command.Parameters.AddWithValue("@id", clientId.Value); var found = command.ExecuteScalar(); if (found != null && found != DBNull.Value) clientName = Convert.ToString(found); }
+            }
             using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
-            { connection.Open(); using (var transaction = connection.BeginTransaction()) { using (var sale = new SQLiteCommand("INSERT INTO sales (number,client_id,status,subtotal,discount,total,payment_method,cash_session_id,created_at) VALUES (@number,@client,'Finalizada',@subtotal,@discount,@total,@payment,@cash,@created); SELECT last_insert_rowid();", connection, transaction)) { sale.Parameters.AddWithValue("@number", number); sale.Parameters.AddWithValue("@client",clientId.HasValue?(object)clientId.Value:DBNull.Value); sale.Parameters.AddWithValue("@subtotal", subtotal); sale.Parameters.AddWithValue("@discount", discount); sale.Parameters.AddWithValue("@total", total); sale.Parameters.AddWithValue("@payment", paymentMethod); sale.Parameters.AddWithValue("@cash",cashId); sale.Parameters.AddWithValue("@created", DateTime.UtcNow.ToString("o")); saleId = Convert.ToInt64(sale.ExecuteScalar()); }
-                    foreach (DataRow item in items.Rows) using (var detail = new SQLiteCommand("INSERT INTO sale_items (sale_id,product_id,description,quantity,unit_price,total) VALUES (@sale,@product,@description,@quantity,@unit,@total)", connection, transaction)) { var quantity = Convert.ToDecimal(item["quantity"]); var price = Convert.ToDecimal(item["unit_price"]); detail.Parameters.AddWithValue("@sale",saleId); detail.Parameters.AddWithValue("@product",Convert.ToInt64(item["product_id"])); detail.Parameters.AddWithValue("@description",Convert.ToString(item["description"])); detail.Parameters.AddWithValue("@quantity",quantity); detail.Parameters.AddWithValue("@unit",price); detail.Parameters.AddWithValue("@total",quantity*price); detail.ExecuteNonQuery(); } transaction.Commit(); }
+            {
+                connection.Open();
+                using (var transaction = connection.BeginTransaction())
+                {
+                    using (var sale = new SQLiteCommand("INSERT INTO sales (number,client_id,status,subtotal,discount,total,payment_method,cash_session_id,created_at,is_deferred,installment_count) VALUES (@number,@client,'Finalizada',@subtotal,@discount,@total,@payment,@cash,@created,@deferred,@installments); SELECT last_insert_rowid();", connection, transaction))
+                    {
+                        sale.Parameters.AddWithValue("@number", number); sale.Parameters.AddWithValue("@client", clientId.HasValue ? (object)clientId.Value : DBNull.Value);
+                        sale.Parameters.AddWithValue("@subtotal", subtotal); sale.Parameters.AddWithValue("@discount", discount); sale.Parameters.AddWithValue("@total", total);
+                        sale.Parameters.AddWithValue("@payment", paymentMethod); sale.Parameters.AddWithValue("@cash", cashId); sale.Parameters.AddWithValue("@created", DateTime.UtcNow.ToString("o"));
+                        sale.Parameters.AddWithValue("@deferred", deferred ? 1 : 0); sale.Parameters.AddWithValue("@installments", paymentSchedule.Rows.Count);
+                        saleId = Convert.ToInt64(sale.ExecuteScalar());
+                    }
+                    foreach (DataRow item in items.Rows)
+                    {
+                        using (var detail = new SQLiteCommand("INSERT INTO sale_items (sale_id,product_id,description,quantity,unit_price,total) VALUES (@sale,@product,@description,@quantity,@unit,@total)", connection, transaction))
+                        {
+                            var quantity = Convert.ToDecimal(item["quantity"]); var price = Convert.ToDecimal(item["unit_price"]);
+                            detail.Parameters.AddWithValue("@sale", saleId); detail.Parameters.AddWithValue("@product", Convert.ToInt64(item["product_id"]));
+                            detail.Parameters.AddWithValue("@description", Convert.ToString(item["description"])); detail.Parameters.AddWithValue("@quantity", quantity);
+                            detail.Parameters.AddWithValue("@unit", price); detail.Parameters.AddWithValue("@total", quantity * price); detail.ExecuteNonQuery();
+                        }
+                    }
+                    transaction.Commit();
+                }
             }
             foreach (DataRow item in items.Rows) MoveStock(Convert.ToInt64(item["product_id"]), -Convert.ToDecimal(item["quantity"]), "Venda PDV", "Venda " + number, null, null);
-            AddAutomaticCashMovement(cashId,"Venda PDV",paymentMethod,total,"Venda " + number);
-            using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;")) using (var financial = new SQLiteCommand("INSERT INTO financial_entries (entry_type,description,document_number,amount,due_date,paid_at,payment_method,status,origin,sale_id,created_at) VALUES ('Receber',@description,@document,@amount,@due,@paid,@payment,'Pago','PDV',@sale,@created)", connection)) { connection.Open(); financial.Parameters.AddWithValue("@description", "Venda " + number); financial.Parameters.AddWithValue("@document", number); financial.Parameters.AddWithValue("@amount", total); financial.Parameters.AddWithValue("@due", DateTime.Now.ToString("yyyy-MM-dd")); financial.Parameters.AddWithValue("@paid", DateTime.UtcNow.ToString("o")); financial.Parameters.AddWithValue("@payment", paymentMethod); financial.Parameters.AddWithValue("@sale", saleId); financial.Parameters.AddWithValue("@created", DateTime.UtcNow.ToString("o")); financial.ExecuteNonQuery(); }
+            if (!deferred) AddAutomaticCashMovement(cashId, "Venda PDV", paymentMethod, total, "Venda " + number + " • " + clientName);
+            else
+            {
+                for (var index = 0; index < paymentSchedule.Rows.Count; index++)
+                {
+                    var installment = paymentSchedule.Rows[index];
+                    if (paymentSchedule.Columns.Contains("is_paid") && Convert.ToBoolean(installment["is_paid"]))
+                    {
+                        var method = paymentSchedule.Columns.Contains("payment_method") ? Convert.ToString(installment["payment_method"]) : paymentMethod;
+                        AddAutomaticCashMovement(cashId, "Entrada de venda a prazo", method, Convert.ToDecimal(installment["amount"]), "Venda " + number + " • " + clientName + " • parcela " + (index + 1));
+                    }
+                }
+            }
+            using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;"))
+            {
+                connection.Open();
+                for (var index = 0; index < paymentSchedule.Rows.Count; index++)
+                {
+                    var installment = paymentSchedule.Rows[index]; var isPaid = paymentSchedule.Columns.Contains("is_paid") && Convert.ToBoolean(installment["is_paid"]);
+                    var method = paymentSchedule.Columns.Contains("payment_method") ? Convert.ToString(installment["payment_method"]) : paymentMethod;
+                    var dueDate = Convert.ToDateTime(installment["due_date"]).ToString("yyyy-MM-dd");
+                    var amount = Convert.ToDecimal(installment["amount"]); var status = isPaid || !deferred ? "Pago" : "Pendente";
+                    var description = "Venda " + number + (paymentSchedule.Rows.Count > 1 ? " • parcela " + (index + 1) + "/" + paymentSchedule.Rows.Count : "");
+                    using (var financial = new SQLiteCommand("INSERT INTO financial_entries (entry_type,party_name,description,document_number,amount,due_date,paid_at,payment_method,status,origin,sale_id,created_at) VALUES ('Receber',@party,@description,@document,@amount,@due,@paid,@payment,@status,'PDV',@sale,@created)", connection))
+                    {
+                        financial.Parameters.AddWithValue("@party", clientName); financial.Parameters.AddWithValue("@description", description); financial.Parameters.AddWithValue("@document", number);
+                        financial.Parameters.AddWithValue("@amount", amount); financial.Parameters.AddWithValue("@due", dueDate);
+                        financial.Parameters.AddWithValue("@paid", status == "Pago" ? (object)DateTime.UtcNow.ToString("o") : DBNull.Value);
+                        financial.Parameters.AddWithValue("@payment", method); financial.Parameters.AddWithValue("@status", status);
+                        financial.Parameters.AddWithValue("@sale", saleId); financial.Parameters.AddWithValue("@created", DateTime.UtcNow.ToString("o")); financial.ExecuteNonQuery();
+                    }
+                }
+            }
             AddAudit("sale_saved", number);
         }
 
