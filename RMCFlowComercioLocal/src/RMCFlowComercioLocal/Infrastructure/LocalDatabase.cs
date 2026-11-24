@@ -826,7 +826,7 @@ FROM work_orders INNER JOIN clients ON clients.id=work_orders.client_id INNER JO
         }
         public DataTable GetCashHistory()
         {
-            return Query("SELECT COALESCE(opened_by,'—') AS 'Operador', substr(opened_at,1,16) AS 'Abertura', COALESCE(substr(closed_at,1,16),'—') AS 'Fechamento', status AS 'Status', printf('R$ %.2f',opening_balance) AS 'Saldo inicial', printf('R$ %.2f',opening_balance + COALESCE((SELECT SUM(amount) FROM cash_movements m WHERE m.cash_session_id=s.id AND payment_method='Dinheiro'),0)) AS 'Esperado', CASE WHEN counted_balance IS NULL THEN '—' ELSE printf('R$ %.2f',counted_balance) END AS 'Contado', CASE WHEN difference IS NULL THEN '—' ELSE printf('R$ %.2f',difference) END AS 'Diferença', COALESCE(closing_notes,'') AS 'Observações' FROM cash_sessions s ORDER BY id DESC LIMIT 20;");
+            return Query("SELECT COALESCE(NULLIF(opened_by,''),'Não registrado') AS 'Operador', substr(opened_at,1,16) AS 'Abertura', COALESCE(substr(closed_at,1,16),'—') AS 'Fechamento', status AS 'Status', printf('R$ %.2f',opening_balance) AS 'Saldo inicial', printf('R$ %.2f',opening_balance + COALESCE((SELECT SUM(amount) FROM cash_movements m WHERE m.cash_session_id=s.id AND payment_method='Dinheiro'),0)) AS 'Esperado', CASE WHEN counted_balance IS NULL THEN '—' ELSE printf('R$ %.2f',counted_balance) END AS 'Contado', CASE WHEN difference IS NULL THEN '—' ELSE printf('R$ %.2f',difference) END AS 'Diferença', COALESCE(closing_notes,'') AS 'Observações' FROM cash_sessions s ORDER BY id DESC LIMIT 20;");
         }
         public long OpenCash(decimal openingBalance) { return OpenCash(openingBalance, "Sistema"); }
         public long OpenCash(decimal openingBalance, string openedBy)

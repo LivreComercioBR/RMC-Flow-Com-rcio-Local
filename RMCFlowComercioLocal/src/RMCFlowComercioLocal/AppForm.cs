@@ -1173,11 +1173,11 @@ namespace RMCFlowComercioLocal
             var header = new Panel { Dock = DockStyle.Fill };
             var title = new Label { Text = "Caixa", Font = new Font("Segoe UI", 16, FontStyle.Bold), AutoSize = true, Location = new Point(0, 0) };
             header.Controls.Add(title);
-            _status.AutoSize = true; _status.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            _status.AutoSize = false; _status.Height = 20; _status.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             header.Controls.Add(_status);
             _openButton.Text = "Abrir caixa"; _openButton.Size = new Size(110, 30); _openButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             _openButton.Click += (s, e) => Open(); header.Controls.Add(_openButton);
-            header.Resize += (s, e) => { _status.Location = new Point(Math.Max(180, header.ClientSize.Width - 300), 9); _openButton.Location = new Point(Math.Max(180, header.ClientSize.Width - 120), 4); };
+            header.Resize += (s, e) => { _status.Location = new Point(0, 31); _status.Width = Math.Max(180, header.ClientSize.Width - 130); _openButton.Location = new Point(Math.Max(180, header.ClientSize.Width - 120), 4); };
             root.Controls.Add(header, 0, 0);
 
             var summary = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 0, 0, 8) };
@@ -1253,7 +1253,7 @@ namespace RMCFlowComercioLocal
             panel.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Location = new Point(12, 10) });
             grid.Location = new Point(12, 42); grid.Size = new Size(900, 90); grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             grid.ReadOnly = true; grid.AllowUserToAddRows = false; grid.AllowUserToDeleteRows = false; grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; grid.BackgroundColor = Color.White; grid.RowHeadersVisible = false;
+            grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None; grid.BackgroundColor = Color.White; grid.RowHeadersVisible = false;
             panel.Controls.Add(grid); return panel;
         }
 
@@ -1261,7 +1261,7 @@ namespace RMCFlowComercioLocal
         {
             var open = _database.GetOpenCash();
             _cashId = open.Rows.Count == 0 ? (long?)null : Convert.ToInt64(open.Rows[0]["id"]);
-            _status.Text = _cashId.HasValue ? "Caixa aberto desde " + Convert.ToDateTime(open.Rows[0]["opened_at"]).ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "Caixa fechado";
+            _status.Text = _cashId.HasValue ? "Operador conectado: " + _user.Name + " • Abertura por: " + (open.Rows[0]["opened_by"] == DBNull.Value || string.IsNullOrWhiteSpace(Convert.ToString(open.Rows[0]["opened_by"])) ? "não registrado nesta abertura antiga" : Convert.ToString(open.Rows[0]["opened_by"])) + " • Desde " + Convert.ToDateTime(open.Rows[0]["opened_at"]).ToLocalTime().ToString("dd/MM/yyyy HH:mm") : "Operador conectado: " + _user.Name + " • Caixa fechado";
             _openButton.Enabled = !_cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.open");
             _registerButton.Enabled = _cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.movement");
             _closeButton.Enabled = _cashId.HasValue && _database.HasPermission(_user.Id, _user.Role, "cash.close");
@@ -1272,14 +1272,40 @@ namespace RMCFlowComercioLocal
                 _metrics[1].Text = Convert.ToDecimal(summary["entries"]).ToString("C2");
                 _metrics[2].Text = Convert.ToDecimal(summary["exits"]).ToString("C2");
                 _metrics[3].Text = Convert.ToDecimal(summary["expected"]).ToString("C2");
-                _movements.DataSource = _database.GetCashMovements(_cashId.Value);
+                _movements.DataSource = _database.GetCashMovements(_cashId.Value); ConfigureMovementColumns();
             }
             else
             {
                 foreach (var metric in _metrics) metric.Text = "R$ 0,00";
                 _movements.DataSource = null;
             }
-            _history.DataSource = _database.GetCashHistory();
+            _history.DataSource = _database.GetCashHistory(); ConfigureHistoryColumns();
+        }
+
+        private void ConfigureMovementColumns()
+        {
+            string[] names = { "Código", "Hora", "Tipo", "Forma", "Categoria", "Descrição", "Entrada", "Saída" };
+            int[] widths = { 45, 92, 88, 65, 82, 130, 78, 78 };
+            for (var i = 0; i < names.Length && i < _movements.Columns.Count; i++)
+            {
+                var column = _movements.Columns[names[i]];
+                if (column == null) continue;
+                column.Width = widths[i]; column.MinimumWidth = Math.Min(widths[i], 45);
+            }
+            if (_movements.Columns["Descrição"] != null) { _movements.Columns["Descrição"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; _movements.Columns["Descrição"].MinimumWidth = 110; }
+        }
+
+        private void ConfigureHistoryColumns()
+        {
+            string[] names = { "Operador", "Abertura", "Fechamento", "Status", "Saldo inicial", "Esperado", "Contado", "Diferença", "Observações" };
+            int[] widths = { 82, 95, 95, 58, 78, 74, 74, 74, 100 };
+            for (var i = 0; i < names.Length && i < _history.Columns.Count; i++)
+            {
+                var column = _history.Columns[names[i]];
+                if (column == null) continue;
+                column.Width = widths[i]; column.MinimumWidth = Math.Min(widths[i], 45);
+            }
+            if (_history.Columns["Observações"] != null) { _history.Columns["Observações"].AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill; _history.Columns["Observações"].MinimumWidth = 90; }
         }
 
         private void Open()
