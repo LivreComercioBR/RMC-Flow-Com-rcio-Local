@@ -95,7 +95,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (id INTEGER PRIMARY KEY, action TEXT NOT N
 SET party_name=(SELECT clients.name FROM sales JOIN clients ON clients.id=sales.client_id WHERE sales.id=financial_entries.sale_id)
 WHERE origin='PDV' AND (party_name IS NULL OR trim(party_name)='') AND EXISTS(SELECT 1 FROM sales JOIN clients ON clients.id=sales.client_id WHERE sales.id=financial_entries.sale_id);", connection)) repairNames.ExecuteNonQuery();
                 using (var repairDeferredSales = new SQLiteCommand("UPDATE sales SET is_deferred=1 WHERE payment_method IN ('Boleto','Crediário') AND is_deferred=0;", connection)) repairDeferredSales.ExecuteNonQuery();
-                using (var repairReceivables = new SQLiteCommand(@"UPDATE financial_entries SET status='Pendente', paid_at=NULL
+                using (var repairReceivables = new SQLiteCommand(@"UPDATE financial_entries SET status='Pendente', paid_at=NULL,
+due_date=COALESCE((SELECT date(sales.created_at,'+30 days') FROM sales WHERE sales.id=financial_entries.sale_id),due_date)
 WHERE origin='PDV' AND status='Pago' AND payment_method IN ('Boleto','Crediário')
 AND sale_id IN (SELECT id FROM sales WHERE payment_method IN ('Boleto','Crediário'))
 AND julianday(COALESCE(paid_at,'')) IS NOT NULL AND abs(julianday(paid_at)-julianday(created_at))*86400<120;", connection)) repairReceivables.ExecuteNonQuery();
