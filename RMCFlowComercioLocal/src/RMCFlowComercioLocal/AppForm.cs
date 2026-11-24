@@ -1954,7 +1954,7 @@ namespace RMCFlowComercioLocal
             var whatsapp = new Button { Text = "PDF + WhatsApp", Location = new Point(354, 14), Size = new Size(160, 32) };
             whatsapp.Click += (s, e) => SendByWhatsApp(database, number); Controls.Add(whatsapp);
             _browser.Location = new Point(18, 56); _browser.Size = new Size(710, 610); _browser.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; Controls.Add(_browser);
-            var header = database.GetSaleHeader(number); var items = database.GetSaleItems(number);
+            var header = database.GetSaleHeader(number); var items = database.GetSaleItems(number); var installments = database.GetSaleInstallments(number);
             if (header.Rows.Count == 0) { _browser.DocumentText = "<html><body>Venda não encontrada.</body></html>"; return; }
             var sale = header.Rows[0]; Func<string, string> enc = value => System.Web.HttpUtility.HtmlEncode(value ?? "");
             string companyHeader = DocumentHeaderHtml.Build(database);
@@ -1964,6 +1964,14 @@ namespace RMCFlowComercioLocal
                 decimal qty = Convert.ToDecimal(row["quantity"]), unit = Convert.ToDecimal(row["unit_price"]), lineTotal = Convert.ToDecimal(row["total"]);
                 lines += "<tr><td>" + enc(Convert.ToString(row["description"])) + "</td><td class='num'>" + qty.ToString("0.###") + "</td><td class='num'>" + unit.ToString("C2") + "</td><td class='num'>" + lineTotal.ToString("C2") + "</td></tr>";
             }
+            string installmentRows = "";
+            for (var i = 0; i < installments.Rows.Count; i++)
+            {
+                var installment = installments.Rows[i]; DateTime due;
+                var dueText = DateTime.TryParse(Convert.ToString(installment["due_date"]), out due) ? due.ToString("dd/MM/yyyy") : Convert.ToString(installment["due_date"]);
+                installmentRows += "<tr><td>" + (i + 1) + "/" + installments.Rows.Count + "</td><td>" + enc(dueText) + "</td><td class='num'>" + Convert.ToDecimal(installment["amount"]).ToString("C2") + "</td><td>" + enc(Convert.ToString(installment["status"])) + "</td><td>" + enc(Convert.ToString(installment["payment_method"])) + "</td></tr>";
+            }
+            string paymentDetails = installments.Rows.Count == 0 ? "" : "<div style='margin-top:22px'><b>Parcelamento e situação das parcelas</b><table><tr><th>Parcela</th><th>Vencimento</th><th class='num'>Valor</th><th>Status</th><th>Forma</th></tr>" + installmentRows + "</table></div>";
             string customer = enc(Convert.ToString(sale["client_name"]));
             string customerInfo = "";
             foreach (string key in new [] { "client_document", "client_phone", "client_email" }) { var value = Convert.ToString(sale[key]); if (!string.IsNullOrWhiteSpace(value)) customerInfo += "<div>" + enc(value) + "</div>"; }
@@ -1973,7 +1981,7 @@ namespace RMCFlowComercioLocal
             string date = DateTimeOffset.TryParse(dateText, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out parsedDate)
                 ? enc(parsedDate.LocalDateTime.ToString("dd/MM/yyyy HH:mm"))
                 : enc(dateText);
-            _browser.DocumentText = "<html><head><meta charset='utf-8'><style>body{font:14px Arial;color:#172b4d;margin:30px}h2{margin:0 0 5px}.muted{color:#667085;font-size:12px}.box{border-bottom:1px solid #ccd5e0;padding:10px 0;margin-bottom:16px}.row{display:flex;justify-content:space-between;margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:8px}"+DocumentHeaderHtml.Css+"th,td{padding:8px;border-bottom:1px solid #d9e0e8;text-align:left}.num{text-align:right}.total{font-size:18px;font-weight:bold}</style></head><body>"+companyHeader+"<div class='row'><div><b>VENDA " + enc(number) + "</b><div class='muted'>" + date + "</div></div><div><b>Status:</b> " + enc(Convert.ToString(sale["status"])) + "</div></div><div class='box'><b>Cliente</b><div>" + customer + "</div>" + customerInfo + "</div><b>Itens da venda</b><table><tr><th>Produto</th><th class='num'>Quantidade</th><th class='num'>Preço unitário</th><th class='num'>Total</th></tr>" + lines + "</table><div style='margin-top:16px;text-align:right'><div>Subtotal: " + subtotal.ToString("C2") + "</div><div>Desconto: " + discount.ToString("C2") + "</div><div class='total'>Total: " + total.ToString("C2") + "</div><div>Pagamento: " + enc(Convert.ToString(sale["payment_method"])) + "</div></div><p class='muted' style='margin-top:28px'>Obrigado pela preferência!</p></body></html>";
+            _browser.DocumentText = "<html><head><meta charset='utf-8'><style>body{font:14px Arial;color:#172b4d;margin:30px}h2{margin:0 0 5px}.muted{color:#667085;font-size:12px}.box{border-bottom:1px solid #ccd5e0;padding:10px 0;margin-bottom:16px}.row{display:flex;justify-content:space-between;margin:4px 0}table{width:100%;border-collapse:collapse;margin-top:8px}"+DocumentHeaderHtml.Css+"th,td{padding:8px;border-bottom:1px solid #d9e0e8;text-align:left}.num{text-align:right}.total{font-size:18px;font-weight:bold}</style></head><body>"+companyHeader+"<div class='row'><div><b>VENDA " + enc(number) + "</b><div class='muted'>" + date + "</div></div><div><b>Status:</b> " + enc(Convert.ToString(sale["status"])) + "</div></div><div class='box'><b>Cliente</b><div>" + customer + "</div>" + customerInfo + "</div><b>Itens da venda</b><table><tr><th>Produto</th><th class='num'>Quantidade</th><th class='num'>Preço unitário</th><th class='num'>Total</th></tr>" + lines + "</table><div style='margin-top:16px;text-align:right'><div>Subtotal: " + subtotal.ToString("C2") + "</div><div>Desconto: " + discount.ToString("C2") + "</div><div class='total'>Total: " + total.ToString("C2") + "</div><div>Pagamento: " + enc(Convert.ToString(sale["payment_method"])) + "</div></div>" + paymentDetails + "<p class='muted' style='margin-top:28px'>Obrigado pela preferência!</p></body></html>";
         }
 
         private void SendByWhatsApp(LocalDatabase database, string number)
