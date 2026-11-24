@@ -1146,8 +1146,13 @@ namespace RMCFlowComercioLocal
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 130));
             Controls.Add(root);
 
-            var title = new Label { Text = "Nota de compra " + Convert.ToString(purchase["number"]), Font = new Font("Segoe UI", 16, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Left };
-            root.Controls.Add(title, 0, 0);
+            var headerPanel = new Panel { Dock = DockStyle.Fill };
+            var title = new Label { Text = "Nota de compra " + Convert.ToString(purchase["number"]), Font = new Font("Segoe UI", 16, FontStyle.Bold), AutoSize = true, Location = new Point(0, 8) };
+            headerPanel.Controls.Add(title);
+            var total = new Label { Text = "Total: " + Convert.ToDecimal(purchase["total"]).ToString("C2"), Font = new Font("Segoe UI", 12, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Top | AnchorStyles.Right };
+            headerPanel.Controls.Add(total);
+            headerPanel.Resize += (s,e) => total.Location = new Point(Math.Max(0, headerPanel.ClientSize.Width - total.Width), 12);
+            root.Controls.Add(headerPanel, 0, 0);
 
             var summary = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, BackColor = Color.White, CellBorderStyle = TableLayoutPanelCellBorderStyle.Single };
             summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58)); summary.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42));
@@ -1167,10 +1172,7 @@ namespace RMCFlowComercioLocal
             root.Controls.Add(new Label { Text = "Parcelas / contas a pagar", Font = new Font("Segoe UI", 11, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Bottom }, 0, 4);
             ConfigureGrid(_payables); _payables.DataSource = database.GetPurchasePayables(purchaseId); root.Controls.Add(_payables, 0, 5);
 
-            var total = new Label { Text = "Total da compra: " + Convert.ToDecimal(purchase["total"]).ToString("C2"), Font = new Font("Segoe UI", 12, FontStyle.Bold), AutoSize = true, Anchor = AnchorStyles.Bottom | AnchorStyles.Right, Location = new Point(0, 0) };
-            Controls.Add(total); total.BringToFront();
-            if (!string.IsNullOrWhiteSpace(Convert.ToString(purchase["cancellation_reason"])))
-                summary.Controls.Add(SummaryLabel("Motivo do cancelamento: " + Convert.ToString(purchase["cancellation_reason"])), 0, 1);
+
         }
 
         private static Label SummaryLabel(string text) { return new Label { Text = text, Dock = DockStyle.Fill, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(8), AutoEllipsis = true }; }
@@ -1181,6 +1183,7 @@ namespace RMCFlowComercioLocal
     internal sealed class PurchaseEditor : Form
     {
         private readonly LocalDatabase _database; private readonly ComboBox _supplier = new ComboBox(); private readonly TextBox _invoice = new TextBox(); private readonly DateTimePicker _date = new DateTimePicker(); private readonly ComboBox _payment = new ComboBox(); private readonly CheckBox _generatePayable = new CheckBox { Text = "Gerar conta a pagar", Checked = true, AutoSize = true }; private readonly ComboBox _terms = new ComboBox(); private readonly NumericUpDown _installmentCount = new NumericUpDown(); private readonly NumericUpDown _intervalDays = new NumericUpDown(); private readonly NumericUpDown _entryAmount = new NumericUpDown(); private readonly NumericUpDown _entryDays = new NumericUpDown(); private readonly ComboBox _product = new ComboBox(); private readonly NumericUpDown _quantity = new NumericUpDown(); private readonly NumericUpDown _cost = new NumericUpDown(); private readonly DataGridView _itemsGrid = new DataGridView(); private readonly DataGridView _installmentsGrid = new DataGridView(); private readonly DataTable _items = new DataTable(); private readonly DataTable _installments = new DataTable(); private readonly Label _total = new Label();
+        public long? SavedPurchaseId { get; private set; }
         public PurchaseEditor(LocalDatabase database) { _database = database; Text = "Nova compra"; StartPosition = FormStartPosition.CenterParent; Size = new Size(930, 830); MinimumSize = new Size(800, 700); Build(); }
         private void Build()
         {
@@ -1245,7 +1248,7 @@ namespace RMCFlowComercioLocal
         private void Save(object sender, EventArgs e)
         {
             if (_supplier.SelectedValue == null) { MessageBox.Show("Selecione o fornecedor."); return; } if (_items.Rows.Count == 0) { MessageBox.Show("Inclua ao menos uma peça."); return; } if (_generatePayable.Checked && _installments.Rows.Count == 0) { GenerateInstallments(); if (_installments.Rows.Count == 0) return; }
-            var supplier = _supplier.SelectedItem as DataRowView; try { _database.SavePurchase(_database.NextPurchaseNumber(), Convert.ToInt64(_supplier.SelectedValue), supplier == null ? _supplier.Text : Convert.ToString(supplier["name"]), _invoice.Text.Trim(), _date.Value.Date, _payment.Text, _generatePayable.Checked, _items, _installments); MessageBox.Show("Compra registrada com sucesso."); DialogResult = DialogResult.OK; } catch (Exception ex) { MessageBox.Show(ex.Message); }
+            var supplier = _supplier.SelectedItem as DataRowView; try { SavedPurchaseId = _database.SavePurchase(_database.NextPurchaseNumber(), Convert.ToInt64(_supplier.SelectedValue), supplier == null ? _supplier.Text : Convert.ToString(supplier["name"]), _invoice.Text.Trim(), _date.Value.Date, _payment.Text, _generatePayable.Checked, _items, _installments); MessageBox.Show("Compra registrada com sucesso."); DialogResult = DialogResult.OK; } catch (Exception ex) { MessageBox.Show(ex.Message); }
         }
     }
 
