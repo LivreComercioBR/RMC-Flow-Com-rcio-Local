@@ -1586,10 +1586,19 @@ namespace RMCFlowComercioLocal
             Controls.Add(new Label { Text = "Forma da entrada recebida", Location = new Point(270, 76), AutoSize = true });
             _entryMethod.DropDownStyle = ComboBoxStyle.DropDownList; _entryMethod.Items.AddRange(new object[] { "Dinheiro", "PIX", "Débito", "Crédito", "Transferência", "Boleto" }); _entryMethod.SelectedItem = _method == "Crédito" ? "Crédito" : "Dinheiro"; if (_entryMethod.SelectedIndex < 0) _entryMethod.SelectedIndex = 0; _entryMethod.Location = new Point(270, 98); _entryMethod.Size = new Size(150, 24); _entryMethod.SelectedIndexChanged += (s, e) => UpdateFirstInstallment(); Controls.Add(_entryMethod);
             Controls.Add(new Label { Text = "Edite as datas e os valores para definir intervalos diferentes (ex.: 10, 20 e 40 dias).", Location = new Point(18, 132), AutoSize = true });
-            _grid.Location = new Point(18, 158); _grid.Size = new Size(625, 260); _grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _grid.BackgroundColor = Color.White; _grid.RowHeadersVisible = false; Controls.Add(_grid);
+            _grid.Location = new Point(18, 158); _grid.Size = new Size(625, 260); _grid.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right; _grid.AllowUserToAddRows = false; _grid.AllowUserToDeleteRows = false; _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill; _grid.BackgroundColor = Color.White; _grid.RowHeadersVisible = false; _grid.AutoGenerateColumns = false;
+            _grid.Columns.Add("due_date", "Vencimento");
+            _grid.Columns["due_date"].DataPropertyName = "due_date"; _grid.Columns["due_date"].DefaultCellStyle.Format = "dd/MM/yyyy";
+            _grid.Columns.Add("amount", "Valor (R$)");
+            _grid.Columns["amount"].DataPropertyName = "amount"; _grid.Columns["amount"].DefaultCellStyle.Format = "N2";
+            _grid.Columns.Add(new DataGridViewCheckBoxColumn { Name = "is_paid", HeaderText = "Recebida na venda", ReadOnly = true });
+            _grid.Columns["is_paid"].DataPropertyName = "is_paid";
+            _grid.Columns.Add("payment_method", "Forma de pagamento");
+            _grid.Columns["payment_method"].DataPropertyName = "payment_method"; _grid.Columns["payment_method"].Visible = false;
+            Controls.Add(_grid);
             var cancel = new Button { Text = "Cancelar", Location = new Point(425, 438), Size = new Size(100, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; cancel.DialogResult = DialogResult.Cancel; Controls.Add(cancel);
             var save = new Button { Text = "Confirmar parcelas", Location = new Point(535, 438), Size = new Size(110, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; save.Click += (s, e) => ConfirmSchedule(); Controls.Add(save);
-            AcceptButton = save; CancelButton = cancel; GenerateSchedule();
+            AcceptButton = save; CancelButton = cancel; Shown += (s, e) => GenerateSchedule();
         }
 
         private void GenerateSchedule()
@@ -1604,10 +1613,6 @@ namespace RMCFlowComercioLocal
                 _schedule.Rows.Add(due, amount, paid, paid ? Convert.ToString(_entryMethod.SelectedItem) : _method);
             }
             _grid.DataSource = _schedule;
-            _grid.Columns["due_date"].HeaderText = "Vencimento"; _grid.Columns["due_date"].DefaultCellStyle.Format = "dd/MM/yyyy";
-            _grid.Columns["amount"].HeaderText = "Valor (R$)"; _grid.Columns["amount"].DefaultCellStyle.Format = "N2";
-            _grid.Columns["is_paid"].HeaderText = "Recebida na venda"; _grid.Columns["is_paid"].Width = 120; _grid.Columns["is_paid"].ReadOnly = true;
-            _grid.Columns["payment_method"].Visible = false;
         }
 
         private void UpdateFirstInstallment()
