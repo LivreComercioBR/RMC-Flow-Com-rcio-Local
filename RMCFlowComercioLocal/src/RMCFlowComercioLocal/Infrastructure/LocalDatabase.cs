@@ -1113,7 +1113,32 @@ ORDER BY 9, 2, 3;");
 
         public DataTable GetPurchases()
         {
-            return Query("SELECT id AS 'Código', number AS 'Compra', supplier_name AS 'Fornecedor', COALESCE(invoice_number,'') AS 'NF / documento', substr(purchased_at,1,10) AS 'Data', printf('R$ %.2f',total) AS 'Total', CASE WHEN payable_generated=1 THEN 'Sim' ELSE 'Não' END AS 'Conta a pagar', COALESCE(status,'Finalizada') AS 'Status' FROM purchases ORDER BY id DESC;");
+            return FindPurchases(string.Empty, null, null, null);
+        }
+
+        public DataTable FindPurchases(string search, long? supplierId, DateTime? fromDate, DateTime? toDate)
+        {
+            var value = (search ?? string.Empty).Replace("'", "''");
+            var supplierClause = supplierId.HasValue && supplierId.Value > 0 ? " AND supplier_id=" + supplierId.Value : string.Empty;
+            var fromClause = fromDate.HasValue ? " AND purchased_at>='" + fromDate.Value.ToString("yyyy-MM-dd") + "'" : string.Empty;
+            var toClause = toDate.HasValue ? " AND purchased_at<='" + toDate.Value.ToString("yyyy-MM-dd") + "'" : string.Empty;
+            var searchClause = string.IsNullOrWhiteSpace(value) ? string.Empty : " AND (number LIKE '%" + value + "%' OR COALESCE(supplier_name,'') LIKE '%" + value + "%' OR COALESCE(invoice_number,'') LIKE '%" + value + "%')";
+            return Query("SELECT id AS 'Código', number AS 'Compra', supplier_name AS 'Fornecedor', COALESCE(invoice_number,'') AS 'NF / documento', substr(purchased_at,1,10) AS 'Data', printf('R$ %.2f',total) AS 'Total', CASE WHEN payable_generated=1 THEN 'Sim' ELSE 'Não' END AS 'Conta a pagar', COALESCE(status,'Finalizada') AS 'Status' FROM purchases WHERE 1=1" + supplierClause + fromClause + toClause + searchClause + " ORDER BY id DESC;");
+        }
+
+        public DataTable GetPurchaseHeader(long purchaseId)
+        {
+            return Query("SELECT purchases.id, purchases.number, purchases.supplier_name, COALESCE(suppliers.document,'') AS supplier_document, COALESCE(suppliers.phone,'') AS supplier_phone, COALESCE(suppliers.email,'') AS supplier_email, COALESCE(purchases.invoice_number,'') AS invoice_number, purchases.purchased_at, COALESCE(purchases.due_date,'') AS due_date, COALESCE(purchases.payment_method,'') AS payment_method, purchases.total, purchases.payable_generated, COALESCE(purchases.status,'Finalizada') AS status, COALESCE(purchases.cancellation_reason,'') AS cancellation_reason FROM purchases LEFT JOIN suppliers ON suppliers.id=purchases.supplier_id WHERE purchases.id=" + purchaseId + " LIMIT 1;");
+        }
+
+        public DataTable GetPurchaseItems(long purchaseId)
+        {
+            return Query("SELECT description AS 'Produto / peça', printf('%.3f',quantity) AS 'Quantidade', printf('R$ %.2f',unit_cost) AS 'Custo unitário', printf('R$ %.2f',total) AS 'Total' FROM purchase_items WHERE purchase_id=" + purchaseId + " ORDER BY id;");
+        }
+
+        public DataTable GetPurchasePayables(long purchaseId)
+        {
+            return Query("SELECT description AS 'Parcela', substr(COALESCE(due_date,''),1,10) AS 'Vencimento', printf('R$ %.2f',amount) AS 'Valor', COALESCE(payment_method,'') AS 'Forma', COALESCE(status,'') AS 'Status', COALESCE(substr(paid_at,1,10),'') AS 'Pago em' FROM financial_entries WHERE purchase_id=" + purchaseId + " ORDER BY due_date,id;");
         }
 
         public string NextPurchaseNumber()
@@ -1121,7 +1146,7 @@ ORDER BY 9, 2, 3;");
             using (var connection = new SQLiteConnection("Data Source=" + _databasePath + ";Version=3;")) using (var command = new SQLiteCommand("SELECT COALESCE(MAX(id),0)+1 FROM purchases", connection)) { connection.Open(); return "CP-" + DateTime.Now.Year + "-" + Convert.ToInt64(command.ExecuteScalar()).ToString("000000"); }
         }
 
-        public void SavePurchase(string number, long supplierId, string supplierName, string invoiceNumber, DateTime purchasedAt, string paymentMethod, bool generatePayable, DataTable items, DataTable installments)
+        public long SavePurchase(string number, long supplierId, string supplierName, string invoiceNumber, DateTime purchasedAt, string paymentMethod, bool generatePayable, DataTable items, DataTable installments)
         { RequirePermission("purchases.manage"); 
             if (items.Rows.Count == 0) throw new InvalidOperationException("Inclua ao menos uma peça na compra."); decimal total = 0; foreach (DataRow item in items.Rows) total += Math.Round(Convert.ToDecimal(item["quantity"]) * Convert.ToDecimal(item["unit_cost"]), 2, MidpointRounding.AwayFromZero); total = Math.Round(total, 2, MidpointRounding.AwayFromZero); long purchaseId;
             if (generatePayable && (installments == null || installments.Rows.Count == 0)) throw new InvalidOperationException("Gere ao menos uma parcela para a conta a pagar.");
@@ -1139,6 +1164,7 @@ ORDER BY 9, 2, 3;");
             }
             foreach (DataRow item in items.Rows) MoveStock(Convert.ToInt64(item["product_id"]), Convert.ToDecimal(item["quantity"]), "Compra", "Compra " + number + (string.IsNullOrWhiteSpace(invoiceNumber) ? string.Empty : " • NF " + invoiceNumber), null, null);
             AddAudit("purchase_saved", number);
+            return purchaseId;
         }
 
         public void CancelPurchase(long purchaseId, string reason)
