@@ -1598,7 +1598,7 @@ namespace RMCFlowComercioLocal
             Controls.Add(_grid);
             var cancel = new Button { Text = "Cancelar", Location = new Point(425, 438), Size = new Size(100, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; cancel.DialogResult = DialogResult.Cancel; Controls.Add(cancel);
             var save = new Button { Text = "Confirmar parcelas", Location = new Point(535, 438), Size = new Size(110, 30), Anchor = AnchorStyles.Bottom | AnchorStyles.Right }; save.Click += (s, e) => ConfirmSchedule(); Controls.Add(save);
-            AcceptButton = save; CancelButton = cancel; GenerateSchedule();
+            AcceptButton = save; CancelButton = cancel; Shown += (s, e) => GenerateSchedule();
         }
 
         private void GenerateSchedule()
