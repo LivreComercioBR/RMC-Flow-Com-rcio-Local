@@ -1888,6 +1888,11 @@ namespace RMCFlowComercioLocal
             DataTable schedule = new DataTable();
             schedule.Columns.Add("due_date", typeof(string)); schedule.Columns.Add("amount", typeof(decimal)); schedule.Columns.Add("is_paid", typeof(bool)); schedule.Columns.Add("payment_method", typeof(string));
             bool deferred = method == "Boleto" || method == "Crediário";
+            if ((method == "Boleto" || method == "Crediário") && !clientId.HasValue)
+            {
+                MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas à conta correta.");
+                return;
+            }
             if (method == "Boleto" || method == "Crediário" || method == "Crédito")
             {
                 using (var form = new PaymentScheduleForm(total, method))
@@ -1896,12 +1901,15 @@ namespace RMCFlowComercioLocal
                     schedule = form.Schedule;
                 }
                 if (schedule.Rows.Count == 0) return;
-                if ((method == "Boleto" || method == "Crediário" || (method == "Crédito" && schedule.Rows.Count > 1)) && !clientId.HasValue)
+                if (method == "Crédito")
                 {
-                    MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas à conta correta.");
-                    return;
+                    deferred = schedule.Rows.Count > 1;
+                    if (deferred && !clientId.HasValue)
+                    {
+                        MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas do cartão.");
+                        return;
+                    }
                 }
-                if (method == "Crédito") deferred = schedule.Rows.Count > 1;
             }
             else
             {
