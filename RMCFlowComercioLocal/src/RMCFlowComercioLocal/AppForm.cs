@@ -1865,7 +1865,7 @@ namespace RMCFlowComercioLocal
             _payment2Amount.DecimalPlaces=2; _payment2Amount.Maximum=1000000; _payment2Amount.ThousandsSeparator=true; _payment2Amount.Location=new Point(220,98); _payment2Amount.Size=new Size(150,24); _payment2Amount.Enabled=false; _payment2Amount.ValueChanged += (s,e) => { InvalidatePaymentSchedules(); UpdatePrimaryPaymentAmount(); }; paymentPanel.Controls.Add(_payment2Amount);
             _configurePayment.Text="Configurar parcelas"; _configurePayment.Location=new Point(400,96); _configurePayment.Size=new Size(145,30); _configurePayment.Click += (s,e) => ConfigurePaymentSchedules(); paymentPanel.Controls.Add(_configurePayment);
             _total.Location=new Point(12,155); _total.AutoSize=true; _total.Font=new Font("Segoe UI",14,FontStyle.Bold); _total.ForeColor=Color.FromArgb(7,55,94); paymentPanel.Controls.Add(_total);
-            var finish=new Button { Text="Finalizar venda", Location=new Point(770,153), Size=new Size(165,36), Anchor=AnchorStyles.Bottom|AnchorStyles.Right, BackColor=Color.FromArgb(24,189,200), ForeColor=Color.White, FlatStyle=FlatStyle.Flat }; finish.Click += Finish; paymentPanel.Controls.Add(finish); 
+            var finish=new Button { Text="Finalizar venda", Location=new Point(770,153), Size=new Size(165,36), Anchor=AnchorStyles.Bottom|AnchorStyles.Right, BackColor=Color.FromArgb(24,189,200), ForeColor=Color.White, FlatStyle=FlatStyle.Flat }; finish.Click += Finish; paymentPanel.Controls.Add(finish); RefreshTotal(); _search.Focus(); 
         }
         private void SearchKey(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress=true; SearchAndAdd(); } }
         private void RefreshProductLookup()
