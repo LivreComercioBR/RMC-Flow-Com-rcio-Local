@@ -1857,7 +1857,7 @@ namespace RMCFlowComercioLocal
             _primaryPaymentAmount.Location=new Point(600,550); _primaryPaymentAmount.AutoSize=true; _primaryPaymentAmount.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; Controls.Add(_primaryPaymentAmount);
             Controls.Add(new Label { Text="Valor da 2ª forma (R$)", Location=new Point(760,550), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _payment2Amount.DecimalPlaces=2; _payment2Amount.Maximum=1000000; _payment2Amount.ThousandsSeparator=true; _payment2Amount.Location=new Point(760,570); _payment2Amount.Size=new Size(115,24); _payment2Amount.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _payment2Amount.Enabled=false; _payment2Amount.ValueChanged += (s,e) => { InvalidatePaymentSchedules(); UpdatePrimaryPaymentAmount(); }; Controls.Add(_payment2Amount);
             Controls.Add(new Label { Text="Desconto (R$)", Location=new Point(600,500), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _discount.DecimalPlaces=2; _discount.Maximum=1000000; _discount.Location=new Point(600,520); _discount.Size=new Size(115,24); _discount.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _discount.ValueChanged += (s,e) => RefreshTotal(); Controls.Add(_discount);
-            _configurePayment.Text="Configurar parcelas"; _configurePayment.Location=new Point(760,600); _configurePayment.Size=new Size(115,30); _configurePayment.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _configurePayment.Click += (s,e) => ConfigurePaymentSchedules(); Controls.Add(_configurePayment);
+            _configurePayment.Text="Configurar parcelas"; _configurePayment.Location=new Point(570,600); _configurePayment.Size=new Size(120,30); _configurePayment.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _configurePayment.Click += (s,e) => ConfigurePaymentSchedules(); Controls.Add(_configurePayment);
             _total.Location=new Point(20,615); _total.AutoSize=true; _total.Font=new Font("Segoe UI",14,FontStyle.Bold); _total.ForeColor=Color.FromArgb(7,55,94); _total.Anchor=AnchorStyles.Bottom|AnchorStyles.Left; Controls.Add(_total); var finish=new Button { Text="Finalizar venda", Location=new Point(710,610), Size=new Size(165,36), Anchor=AnchorStyles.Bottom|AnchorStyles.Right, BackColor=Color.FromArgb(24,189,200), ForeColor=Color.White, FlatStyle=FlatStyle.Flat }; finish.Click += Finish; Controls.Add(finish); RefreshTotal(); _search.Focus();
         }
         private void SearchKey(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress=true; SearchAndAdd(); } }
@@ -1903,7 +1903,7 @@ namespace RMCFlowComercioLocal
         }
         private void PaymentMethodChanged(bool second)
         {
-            InvalidatePaymentSchedules();
+            if(second) _secondarySchedule=null; else _primarySchedule=null;
             if(_items.Rows.Count==0) return;
             var method=second?Convert.ToString(_payment2.SelectedItem):Convert.ToString(_payment.SelectedItem);
             var amount=second?_payment2Amount.Value:FirstPaymentAmount();
