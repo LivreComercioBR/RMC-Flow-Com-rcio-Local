@@ -1195,7 +1195,15 @@ ORDER BY 9, 2, 3;");
                 }
             }
             foreach (DataRow item in items.Rows) MoveStock(Convert.ToInt64(item["product_id"]), -Convert.ToDecimal(item["quantity"]), "Venda PDV", "Venda " + number, null, null);
-            if (!deferred) AddAutomaticCashMovement(cashId, "Venda PDV", paymentMethod, total, "Venda " + number + " • " + clientName);
+            if (!deferred)
+            {
+                for (var index = 0; index < paymentSchedule.Rows.Count; index++)
+                {
+                    var installment = paymentSchedule.Rows[index];
+                    var method = paymentSchedule.Columns.Contains("payment_method") ? Convert.ToString(installment["payment_method"]) : paymentMethod;
+                    AddAutomaticCashMovement(cashId, "Venda PDV", method, Convert.ToDecimal(installment["amount"]), "Venda " + number + " • " + clientName);
+                }
+            }
             else
             {
                 for (var index = 0; index < paymentSchedule.Rows.Count; index++)

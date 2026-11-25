@@ -1836,7 +1836,7 @@ namespace RMCFlowComercioLocal
 
     internal sealed class PdvForm : Form
     {
-        private readonly LocalDatabase _database; private readonly TextBox _search = new TextBox(); private readonly ListBox _found = new ListBox(); private readonly ComboBox _client = new ComboBox(); private readonly DataGridView _cart = new DataGridView(); private readonly ComboBox _payment = new ComboBox(); private readonly NumericUpDown _discount = new NumericUpDown(); private readonly Label _total = new Label(); private readonly DataTable _items = new DataTable();
+        private readonly LocalDatabase _database; private readonly TextBox _search = new TextBox(); private readonly ListBox _found = new ListBox(); private readonly ComboBox _client = new ComboBox(); private readonly DataGridView _cart = new DataGridView(); private readonly ComboBox _payment = new ComboBox(); private readonly CheckBox _splitPayment = new CheckBox(); private readonly ComboBox _payment2 = new ComboBox(); private readonly NumericUpDown _payment2Amount = new NumericUpDown(); private readonly NumericUpDown _discount = new NumericUpDown(); private readonly Label _total = new Label(); private readonly Label _primaryPaymentAmount = new Label(); private readonly Button _configurePayment = new Button(); private readonly DataTable _items = new DataTable(); private DataTable _primarySchedule; private DataTable _secondarySchedule;
         public PdvForm(LocalDatabase database) { _database = database; Text = "PDV — Venda rápida"; StartPosition = FormStartPosition.CenterParent; Size = new Size(920, 700); MinimumSize = new Size(760, 570); Build(); }
         private void Build()
         {
@@ -1851,9 +1851,14 @@ namespace RMCFlowComercioLocal
             _cart.Location=new Point(20,210); _cart.Size=new Size(850,286); _cart.Anchor=AnchorStyles.Top|AnchorStyles.Bottom|AnchorStyles.Left|AnchorStyles.Right; _cart.ReadOnly=true; _cart.AllowUserToAddRows=false; _cart.AllowUserToDeleteRows=false; _cart.SelectionMode=DataGridViewSelectionMode.FullRowSelect; _cart.MultiSelect=false; _cart.AutoSizeColumnsMode=DataGridViewAutoSizeColumnsMode.Fill; _cart.BackgroundColor=Color.White; Controls.Add(_cart); _cart.DataSource=_items;
             foreach (string hidden in new []{"product_id","quantity","unit_price","description"}) if (_cart.Columns.Contains(hidden)) _cart.Columns[hidden].Visible=false;
             var remove = new Button { Text="Remover item", Location=new Point(20,510), Size=new Size(115,30), Anchor=AnchorStyles.Bottom|AnchorStyles.Left }; remove.Click += (s,e) => { if (_cart.CurrentRow != null) { _items.Rows.RemoveAt(_cart.CurrentRow.Index); RefreshTotal(); } }; Controls.Add(remove);
-            Controls.Add(new Label { Text="Pagamento", Location=new Point(440,510), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _payment.Items.AddRange(new object[]{"Dinheiro","PIX","Débito","Crédito","Transferência","Boleto","Crediário","Outros"}); _payment.Text="PIX"; _payment.Location=new Point(440,530); _payment.Size=new Size(150,24); _payment.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; Controls.Add(_payment);
-            Controls.Add(new Label { Text="Desconto (R$)", Location=new Point(600,510), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _discount.DecimalPlaces=2; _discount.Maximum=1000000; _discount.Location=new Point(600,530); _discount.Size=new Size(120,24); _discount.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _discount.ValueChanged += (s,e) => RefreshTotal(); Controls.Add(_discount);
-            _total.Location=new Point(20,565); _total.AutoSize=true; _total.Font=new Font("Segoe UI",14,FontStyle.Bold); _total.ForeColor=Color.FromArgb(7,55,94); _total.Anchor=AnchorStyles.Bottom|AnchorStyles.Left; Controls.Add(_total); var finish=new Button { Text="Finalizar venda", Location=new Point(710,560), Size=new Size(160,36), Anchor=AnchorStyles.Bottom|AnchorStyles.Right, BackColor=Color.FromArgb(24,189,200), ForeColor=Color.White, FlatStyle=FlatStyle.Flat }; finish.Click += Finish; Controls.Add(finish); RefreshTotal(); _search.Focus();
+            Controls.Add(new Label { Text="Pagamento", Location=new Point(440,500), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _payment.Items.AddRange(new object[]{"Dinheiro","PIX","Débito","Crédito","Transferência","Boleto","Crediário","Outros"}); _payment.DropDownStyle=ComboBoxStyle.DropDownList; _payment.Text="PIX"; _payment.Location=new Point(440,520); _payment.Size=new Size(145,24); _payment.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _payment.SelectedIndexChanged += (s,e) => PaymentMethodChanged(false); Controls.Add(_payment);
+            _splitPayment.Text="Combinar duas formas"; _splitPayment.AutoSize=true; _splitPayment.Location=new Point(600,522); _splitPayment.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _splitPayment.CheckedChanged += (s,e) => SplitPaymentChanged(); Controls.Add(_splitPayment);
+            Controls.Add(new Label { Text="2ª forma", Location=new Point(440,550), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _payment2.Items.AddRange(new object[]{"Dinheiro","PIX","Débito","Crédito","Transferência","Boleto","Crediário","Outros"}); _payment2.DropDownStyle=ComboBoxStyle.DropDownList; _payment2.SelectedIndex=0; _payment2.Location=new Point(440,570); _payment2.Size=new Size(145,24); _payment2.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _payment2.Enabled=false; _payment2.SelectedIndexChanged += (s,e) => PaymentMethodChanged(true); Controls.Add(_payment2);
+            _primaryPaymentAmount.Location=new Point(600,550); _primaryPaymentAmount.AutoSize=true; _primaryPaymentAmount.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; Controls.Add(_primaryPaymentAmount);
+            Controls.Add(new Label { Text="Valor da 2ª forma (R$)", Location=new Point(760,550), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _payment2Amount.DecimalPlaces=2; _payment2Amount.Maximum=1000000; _payment2Amount.ThousandsSeparator=true; _payment2Amount.Location=new Point(760,570); _payment2Amount.Size=new Size(115,24); _payment2Amount.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _payment2Amount.Enabled=false; _payment2Amount.ValueChanged += (s,e) => { InvalidatePaymentSchedules(); UpdatePrimaryPaymentAmount(); }; Controls.Add(_payment2Amount);
+            Controls.Add(new Label { Text="Desconto (R$)", Location=new Point(600,500), AutoSize=true, Anchor=AnchorStyles.Bottom|AnchorStyles.Right }); _discount.DecimalPlaces=2; _discount.Maximum=1000000; _discount.Location=new Point(600,520); _discount.Size=new Size(115,24); _discount.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _discount.ValueChanged += (s,e) => RefreshTotal(); Controls.Add(_discount);
+            _configurePayment.Text="Configurar parcelas"; _configurePayment.Location=new Point(570,600); _configurePayment.Size=new Size(120,30); _configurePayment.Anchor=AnchorStyles.Bottom|AnchorStyles.Right; _configurePayment.Click += (s,e) => ConfigurePaymentSchedules(); Controls.Add(_configurePayment);
+            _total.Location=new Point(20,615); _total.AutoSize=true; _total.Font=new Font("Segoe UI",14,FontStyle.Bold); _total.ForeColor=Color.FromArgb(7,55,94); _total.Anchor=AnchorStyles.Bottom|AnchorStyles.Left; Controls.Add(_total); var finish=new Button { Text="Finalizar venda", Location=new Point(710,610), Size=new Size(165,36), Anchor=AnchorStyles.Bottom|AnchorStyles.Right, BackColor=Color.FromArgb(24,189,200), ForeColor=Color.White, FlatStyle=FlatStyle.Flat }; finish.Click += Finish; Controls.Add(finish); RefreshTotal(); _search.Focus();
         }
         private void SearchKey(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress=true; SearchAndAdd(); } }
         private void RefreshProductLookup()
@@ -1878,57 +1883,86 @@ namespace RMCFlowComercioLocal
             var row = _found.SelectedItem as DataRowView; if (row == null) { MessageBox.Show("Busque e selecione um produto."); return; } long id=Convert.ToInt64(row["id"]); foreach(DataRow item in _items.Rows) if(Convert.ToInt64(item["product_id"])==id) { item["Qtd."]=item["quantity"]=Convert.ToDecimal(item["quantity"])+1; item["Total"]=Convert.ToDecimal(item["quantity"])*Convert.ToDecimal(item["unit_price"]); ClearSearch(); RefreshTotal(); return; } var price=Convert.ToDecimal(row["sale_price"]); var added=_items.NewRow(); added["product_id"]=id; added["Descrição"]=added["description"]=Convert.ToString(row["name"]); added["Qtd."]=added["quantity"]=1M; added["Valor unitário"]=added["unit_price"]=price; added["Total"]=price; _items.Rows.Add(added); ClearSearch(); RefreshTotal();
         }
         private void ClearSearch() { _search.Text=""; _found.DataSource=null; _search.Focus(); }
-        private void RefreshTotal() { decimal sum=0; foreach(DataRow r in _items.Rows) sum += Convert.ToDecimal(r["Total"]); _total.Text="Total da venda: " + Math.Max(0,sum-_discount.Value).ToString("C2"); }
+        private void RefreshTotal() { decimal sum=0; foreach(DataRow r in _items.Rows) sum += Convert.ToDecimal(r["Total"]); _total.Text="Total da venda: " + Math.Max(0,sum-_discount.Value).ToString("C2"); InvalidatePaymentSchedules(); UpdatePrimaryPaymentAmount(); }
         private void LoadClients() { _client.DataSource = _database.GetSaleClientLookup(); _client.DisplayMember = "name"; _client.ValueMember = "id"; }
         private void NewClient() { using (var form = new ClientEditor(_database, null)) { if (form.ShowDialog(this) == DialogResult.OK) LoadClients(); } }
         private void SearchClient() { using (var form = new ClientSearchForm(_database)) { if (form.ShowDialog(this) == DialogResult.OK) { LoadClients(); _client.SelectedValue = form.SelectedId; } } }
-        private void Finish(object sender, EventArgs e)
+        private static bool SupportsInstallments(string method) { return method == "Boleto" || method == "Crediário" || method == "Crédito"; }
+        private static DataTable NewPaymentSchedule() { var table=new DataTable(); table.Columns.Add("due_date",typeof(string)); table.Columns.Add("amount",typeof(decimal)); table.Columns.Add("is_paid",typeof(bool)); table.Columns.Add("payment_method",typeof(string)); return table; }
+        private decimal SaleTotal() { decimal subtotal=0; foreach(DataRow item in _items.Rows) subtotal += Convert.ToDecimal(item["quantity"])*Convert.ToDecimal(item["unit_price"]); return Math.Max(0,subtotal-_discount.Value); }
+        private decimal FirstPaymentAmount() { var total=SaleTotal(); return _splitPayment.Checked ? total-_payment2Amount.Value : total; }
+        private void InvalidatePaymentSchedules() { _primarySchedule=null; _secondarySchedule=null; }
+        private void UpdatePrimaryPaymentAmount() { if(_primaryPaymentAmount!=null) _primaryPaymentAmount.Text="1ª forma: "+Math.Max(0,FirstPaymentAmount()).ToString("C2"); }
+        private void SplitPaymentChanged()
         {
-            if (_items.Rows.Count == 0) { MessageBox.Show("Inclua ao menos um produto no carrinho."); return; }
-            long? clientId = null;
-            if (_client.SelectedValue != null && Convert.ToInt64(_client.SelectedValue) > 0) clientId = Convert.ToInt64(_client.SelectedValue);
-            decimal subtotal = 0; foreach (DataRow item in _items.Rows) subtotal += Convert.ToDecimal(item["quantity"]) * Convert.ToDecimal(item["unit_price"]);
-            var total = Math.Max(0, subtotal - _discount.Value);
-            var method = Convert.ToString(_payment.SelectedItem);
-            DataTable schedule = new DataTable();
-            schedule.Columns.Add("due_date", typeof(string)); schedule.Columns.Add("amount", typeof(decimal)); schedule.Columns.Add("is_paid", typeof(bool)); schedule.Columns.Add("payment_method", typeof(string));
-            bool deferred = method == "Boleto" || method == "Crediário";
-            if ((method == "Boleto" || method == "Crediário") && !clientId.HasValue)
+            _payment2.Enabled=_splitPayment.Checked; _payment2Amount.Enabled=_splitPayment.Checked;
+            if(!_splitPayment.Checked) _payment2Amount.Value=0;
+            else if(SaleTotal()>0 && _payment2Amount.Value==0) _payment2Amount.Value=Math.Round(SaleTotal()/2,2,MidpointRounding.AwayFromZero);
+            InvalidatePaymentSchedules(); UpdatePrimaryPaymentAmount();
+            if(_splitPayment.Checked && _items.Rows.Count>0 && SupportsInstallments(_payment.Text)) ConfigureOnePayment(false);
+        }
+        private void PaymentMethodChanged(bool second)
+        {
+            if(second) _secondarySchedule=null; else _primarySchedule=null;
+            if(_items.Rows.Count==0) return;
+            var method=second?Convert.ToString(_payment2.SelectedItem):Convert.ToString(_payment.SelectedItem);
+            var amount=second?_payment2Amount.Value:FirstPaymentAmount();
+            if(SupportsInstallments(method) && amount>0) ConfigureOnePayment(second);
+        }
+        private bool ConfigureOnePayment(bool second)
+        {
+            var method=second?Convert.ToString(_payment2.SelectedItem):Convert.ToString(_payment.SelectedItem);
+            var amount=second?_payment2Amount.Value:FirstPaymentAmount();
+            if(amount<=0) { MessageBox.Show("Informe valores maiores que zero para as duas formas de pagamento."); return false; }
+            long? clientId=null; if(_client.SelectedValue!=null && _client.SelectedValue!=DBNull.Value && Convert.ToInt64(_client.SelectedValue)>0) clientId=Convert.ToInt64(_client.SelectedValue);
+            if((method=="Boleto"||method=="Crediário")&&!clientId.HasValue){MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas à conta correta.");return false;}
+            DataTable schedule;
+            if(SupportsInstallments(method))
             {
-                MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas à conta correta.");
-                return;
-            }
-            if (method == "Boleto" || method == "Crediário" || method == "Crédito")
-            {
-                using (var form = new PaymentScheduleForm(total, method))
+                using(var form=new PaymentScheduleForm(amount,method)){if(form.ShowDialog(this)!=DialogResult.OK)return false;schedule=form.Schedule;}
+                if(schedule.Rows.Count==0)return false;
+                if(method=="Crédito" && !clientId.HasValue)
                 {
-                    if (form.ShowDialog(this) != DialogResult.OK) return;
-                    schedule = form.Schedule;
-                }
-                if (schedule.Rows.Count == 0) return;
-                if (method == "Crédito")
-                {
-                    deferred = schedule.Rows.Count > 1 || !Convert.ToBoolean(schedule.Rows[0]["is_paid"]);
-                    if (deferred && !clientId.HasValue)
-                    {
-                        MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas do cartão.");
-                        return;
-                    }
+                    foreach(DataRow row in schedule.Rows) if(!Convert.ToBoolean(row["is_paid"])) { MessageBox.Show("Selecione ou cadastre o cliente para vincular as parcelas do cartão.");return false; }
                 }
             }
             else
             {
-                schedule.Rows.Add(DateTime.Now.ToString("yyyy-MM-dd"), total, true, method);
+                schedule=NewPaymentSchedule(); schedule.Rows.Add(DateTime.Today.ToString("yyyy-MM-dd"),amount,true,method);
             }
-            var saleMethod = method;
-            if ((method == "Boleto" || method == "Crediário" || method == "Crédito") && schedule.Rows.Count > 1)
-                saleMethod += " (" + schedule.Rows.Count + "x)";
-            var number = _database.NextSaleNumber();
-            try { _database.SaveSale(number, _items, saleMethod, _discount.Value, clientId, schedule, deferred); }
-            catch (Exception ex) { MessageBox.Show(ex.Message); return; }
-            MessageBox.Show("Venda " + number + " finalizada com sucesso.");
-            using (var receipt = new SaleReceiptForm(_database, number)) receipt.ShowDialog(this);
-            DialogResult = DialogResult.OK;
+            if(second)_secondarySchedule=schedule;else _primarySchedule=schedule;
+            return true;
+        }
+        private bool ConfigurePaymentSchedules()
+        {
+            if(_items.Rows.Count==0){MessageBox.Show("Inclua os produtos antes de configurar o pagamento.");return false;}
+            if(_splitPayment.Checked && (_payment2Amount.Value<=0 || _payment2Amount.Value>=SaleTotal())){MessageBox.Show("O valor da segunda forma deve ser maior que zero e menor que o total da venda.");return false;}
+            if(!ConfigureOnePayment(false))return false;
+            if(_splitPayment.Checked && !ConfigureOnePayment(true))return false;
+            return true;
+        }
+        private static decimal SumSchedule(DataTable schedule){decimal total=0;if(schedule!=null)foreach(DataRow row in schedule.Rows)total+=Convert.ToDecimal(row["amount"]);return total;}
+        private static string PaymentSummary(string method,DataTable schedule){var count=schedule==null?0:schedule.Rows.Count;return SupportsInstallments(method)&&count>1?method+" ("+count+"x)":method;}
+        private void Finish(object sender, EventArgs e)
+        {
+            if (_items.Rows.Count == 0) { MessageBox.Show("Inclua ao menos um produto no carrinho."); return; }
+            long? clientId = null; if (_client.SelectedValue != null && _client.SelectedValue != DBNull.Value && Convert.ToInt64(_client.SelectedValue) > 0) clientId = Convert.ToInt64(_client.SelectedValue);
+            var total=SaleTotal(); var method=Convert.ToString(_payment.SelectedItem);
+            if(_splitPayment.Checked && (_payment2Amount.Value<=0 || _payment2Amount.Value>=total)){MessageBox.Show("O valor da segunda forma deve ser maior que zero e menor que o total da venda.");return;}
+            if(_primarySchedule==null){if(SupportsInstallments(method)){MessageBox.Show("Configure as parcelas na primeira tela antes de finalizar. Use o botão Configurar parcelas.");return;}_primarySchedule=NewPaymentSchedule();_primarySchedule.Rows.Add(DateTime.Today.ToString("yyyy-MM-dd"),FirstPaymentAmount(),true,method);}
+            if(_splitPayment.Checked && _secondarySchedule==null){var method2=Convert.ToString(_payment2.SelectedItem);if(SupportsInstallments(method2)){MessageBox.Show("Configure as parcelas da segunda forma na primeira tela antes de finalizar.");return;}_secondarySchedule=NewPaymentSchedule();_secondarySchedule.Rows.Add(DateTime.Today.ToString("yyyy-MM-dd"),_payment2Amount.Value,true,method2);}
+            var schedule=NewPaymentSchedule();
+            foreach(DataRow row in _primarySchedule.Rows)schedule.ImportRow(row);
+            if(_splitPayment.Checked)foreach(DataRow row in _secondarySchedule.Rows)schedule.ImportRow(row);
+            if(Math.Abs(SumSchedule(schedule)-total)>0.01M){MessageBox.Show("A soma dos pagamentos precisa ser igual ao total da venda. Reconfigure as parcelas.");return;}
+            bool deferred=false;foreach(DataRow row in schedule.Rows)if(!Convert.ToBoolean(row["is_paid"]))deferred=true;
+            if(deferred&&!clientId.HasValue){MessageBox.Show("Selecione ou cadastre o cliente para vincular os valores pendentes.");return;}
+            var saleMethod=PaymentSummary(method,_primarySchedule);if(_splitPayment.Checked)saleMethod+=" + "+PaymentSummary(Convert.ToString(_payment2.SelectedItem),_secondarySchedule);
+            var number=_database.NextSaleNumber();
+            try{_database.SaveSale(number,_items,saleMethod,_discount.Value,clientId,schedule,deferred);}catch(Exception ex){MessageBox.Show(ex.Message);return;}
+            MessageBox.Show("Venda "+number+" finalizada com sucesso.");
+            using(var receipt=new SaleReceiptForm(_database,number))receipt.ShowDialog(this);
+            DialogResult=DialogResult.OK;
         }
     }
 
